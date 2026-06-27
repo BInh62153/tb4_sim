@@ -1,0 +1,160 @@
+#  Config:
+#    sim          → Ignition Gazebo only
+#    nav          → sim + Nav2 + SLAM
+#    full         → sim + nav + task manager + patrol
+#    rviz         → RViz2 visualizer (add to any profile)
+
+
+x-ros-env: &ros-env
+  ROS_DOMAIN_ID: "0"
+  RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+  CYCLONEDDS_URI: file:///ros2_ws/config/cyclonedds/cyclonedds.xml
+  TURTLEBOT4_MODEL: standard
+  IGN_GAZEBO_RESOURCE_PATH: /opt/ros/humble/share
+  GZ_FUEL_CACHE_DIR: /root/.ignition/fuel
+  # Headless Ignition: tách server và GUI thành 2 process riêng
+  # để tránh race condition GUI chờ server đang download fuel models
+  IGN_GAZEBO_SERVER_CONFIG_PATH: ""
+
+x-display: &display
+  DISPLAY: ${DISPLAY:-:0}
+  LIBGL_ALWAYS_SOFTWARE: "0"
+  QT_X11_NO_MITSHM: "1"
+  NVIDIA_DRIVER_CAPABILITIES: all
+
+# Env riêng cho simulator chạy headless — không cần DISPLAY
+x-sim-env: &sim-env
+  ROS_DOMAIN_ID: "0"
+  RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+  CYCLONEDDS_URI: file:///ros2_ws/config/cyclonedds/cyclonedds.xml
+  TURTLEBOT4_MODEL: standard
+  IGN_GAZEBO_RESOURCE_PATH: /opt/ros/humble/share
+  GZ_FUEL_CACHE_DIR: /root/.ignition/fuel
+  IGN_GAZEBO_SERVER_CONFIG_PATH: ""
+  # Xvfb virtual display cho OGRE sensor rendering (OAK-D camera)
+  # entrypoint.sh sẽ start Xvfb :99 tự động
+  DISPLAY: ":99"
+  LIBGL_ALWAYS_SOFTWARE: "1"
+  QT_QPA_PLATFORM: offscreen
+
+x-base: &base
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.sim
+  environment:
+    <<: [*ros-env, *display]
+  volumes:
+    # X11 display access
+    - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    - ${XAUTHORITY:-$HOME/.Xauthority}:/root/.Xauthority:ro
+    # GPU (NVIDIA)
+    - /dev/dri:/dev/dri
+    # Shared config (live-reload friendly)
+    - ./config:/ros2_ws/config
+    - ./maps:/ros2_ws/maps
+    - ./worlds:/ros2_ws/worlds
+    - ./scripts:/ros2_ws/scripts
+    # Fuel model cache — persist giữa các lần restart để không download lại
+    - fuel_cache:/root/.ignition/fuel
+    # Mount live python code directly to save rebuild time for minor logic tweaks
+    # Chỉ mount src/ — không mount vào install/ vì Docker sẽ tạo empty dir
+    # làm hỏng colcon build artifacts bên trong container
+    - ./src/task_manager/task_manager:/ros2_ws/src/task_manager/task_manager
+  ipc: host
+  network_mode: host
+  restart: on-failure
+  entrypoint: ["/entrypoint.sh"]
+
+services:
+  # ── 1. Simulator (Gazebo) ───────────────────────────────────────────────────
+  simulator:
+    <<: *base
+    container_name: tb4_simulator
+    profiles: ["sim", "nav", "full","rviz"]
+    environment:
+      <<: [*ros-env, *display] #*sim-env
+    # Dùng custom launch file thay vì ignition.launch.py
+    # → thêm -s (server-only) vào gz_args, không cần DISPLAY
+    # File được mount qua ./scripts volume
+    command: >-
+      bash -c "source /opt/ros/humble/setup.bash &&
+      ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py
+      model:=standard world:=warehouse"
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list 2>/dev/null | grep -q /scan && ros2 topic list 2>/dev/null | grep -q /odom"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 300s
+
+  # ── 2. SLAM (Mapping) ───────────────────────────────────────────────────────
+  slam:
+    <<: *base
+    container_name: tb4_slam
+    profiles: ["nav", "full"]
+    depends_on:
+      simulator:
+        condition: service_healthy
+    command: >-
+      bash -c "source /opt/ros/humble/setup.bash &&
+      sleep 20 &&
+      ros2 launch slam_toolbox online_async_launch.py params_file:=/ros2_ws/config/slam/slam_toolbox_params.yaml use_sim_time:=true"
+      # FIXED: sleep 5 → 20: healthcheck chỉ đảm bảo /scan và /odom có, nhưng TF buffer
+      # cần thêm thời gian để ổn định. 5s là không đủ → SLAM nhận được TF rỗng → "Failed to compute odom pose"
+
+  # ── 3. Navigation (Nav2 Stack) ──────────────────────────────────────────────
+  navigation:
+    <<: *base
+    container_name: tb4_navigation
+    profiles: ["nav", "full"]
+    depends_on:
+      simulator:
+        condition: service_healthy
+    command: >-
+      bash -c "source /opt/ros/humble/setup.bash &&
+      sleep 30 &&
+      ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true params_file:=/ros2_ws/config/nav2/nav2_params.yaml autostart:=true"
+      # FIXED: sleep 5 → 30: Nav2 cần SLAM đã publish map→odom TF trước khi khởi động
+      # Nếu Nav2 start trước SLAM → controller/planner không thấy TF map→base_link → lỗi connectivity
+
+  # ── 4. RViz2 Visualizer ─────────────────────────────────────────────────────
+  rviz:
+    <<: *base
+    container_name: tb4_rviz
+    profiles: ["rviz"]
+    depends_on:
+      simulator:
+        condition: service_healthy
+    command: >-
+      bash -c "source /opt/ros/humble/setup.bash &&
+      sleep 8 &&
+      ros2 launch turtlebot4_viz view_robot.launch.py"
+
+  # ── 5. Task Manager (waypoints, patrol, memory) ──────────────────────────────
+  task_manager:
+    <<: *base
+    container_name: tb4_task_manager
+    profiles: ["full"]
+    depends_on:
+      - navigation
+    command: >-
+      bash -c "source /opt/ros/humble/setup.bash &&
+      source /ros2_ws/install/setup.bash &&
+      sleep 15 &&
+      ros2 run task_manager task_manager_lifecycle --ros-args -p use_sim_time:=true -p waypoints_file:=/ros2_ws/config/waypoints.yaml" 
+      # <── ĐÃ SỬA: Đổi từ 'task_manager_node' sang 'task_manager_lifecycle' để khớp với setup.py
+
+  # ── 6. Interactive CLI ───────────────────────────────────────────────────────
+  cli:
+    <<: *base
+    container_name: tb4_cli
+    profiles: ["full", "nav"]
+    depends_on:
+      simulator:
+        condition: service_healthy
+    command: sleep infinity
+
+volumes:
+  # Fuel model cache dùng chung giữa tất cả containers
+  # Sau lần đầu download xong, các lần restart sẽ load từ cache → healthy nhanh hơn
+  fuel_cache:
