@@ -87,8 +87,8 @@ class DockManager:
             return
 
         self._slog.info("dock_arrived")
-        # Register callback: BatteryManager gọi khi sạc xong
-        self._battery_mgr._on_charged_cb = self._on_charge_complete
+        # Đăng ký callback qua public API — không truy cập private attr
+        self._battery_mgr.set_charged_callback(self._on_charge_complete)
 
         # Heartbeat timer để log trạng thái sạc
         self._charge_timer = self._node.create_timer(
@@ -108,6 +108,7 @@ class DockManager:
         self._finish(True)
 
     def _finish(self, success: bool):
+        self._battery_mgr.set_charged_callback(None)   # clear để tránh fire lại
         self._battery_mgr.reset_flags()
         if self._on_complete:
             self._on_complete(success)

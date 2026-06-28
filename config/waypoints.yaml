@@ -84,4 +84,4 @@ waypoints:
 # Điều kiện khẩn cấp
 emergency_rules:
   low_battery_threshold: 20     # % pin
-  low_battery_action: "diem_charging"  # waypoint khi pin thấp
+  low_battery_action: "tram_sac"   # waypoint khi pin thấp

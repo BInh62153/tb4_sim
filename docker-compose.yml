@@ -54,7 +54,7 @@ x-base: &base
     - ./src/task_manager/task_manager:/ros2_ws/src/task_manager/task_manager
   ipc: host
   network_mode: host
-  restart: on-failure
+  restart: unless-stopped # Đổi từ on-failure sang unless-stopped
   entrypoint: ["/entrypoint.sh"]
 
 services:
@@ -88,8 +88,14 @@ services:
         condition: service_healthy
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
-      sleep 20 &&
+      sleep 30 &&
       ros2 launch slam_toolbox online_async_launch.py params_file:=/ros2_ws/config/slam/slam_toolbox_params.yaml use_sim_time:=true"
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list 2>/dev/null | grep -q /map"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   # ── 3. Navigation (Nav2 Stack) ──────────────────────────────────────────────
   navigation:
@@ -97,14 +103,20 @@ services:
     container_name: tb4_navigation
     profiles: ["nav", "full"]
     environment:
-      <<: [*ros-env, *headless-env]   # FIXED: headless
+      <<: [*ros-env, *headless-env]
     depends_on:
-      simulator:
+      slam:
         condition: service_healthy
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
-      sleep 30 &&
+      sleep 10 &&
       ros2 launch nav2_bringup navigation_launch.py use_sim_time:=true params_file:=/ros2_ws/config/nav2/nav2_params.yaml autostart:=true"
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list 2>/dev/null | grep -q /local_costmap/costmap"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
 
   # ── 4. RViz2 Visualizer ─────────────────────────────────────────────────────
   rviz:

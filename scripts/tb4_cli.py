@@ -28,7 +28,10 @@ def completer(text, state):
     if len(tokens) <= 1:
         options = [cmd for cmd in COMMANDS if cmd.startswith(text)]
     else:
-        goals = ["diem_A", "diem_B", "diem_C"]
+        import yaml
+        with open('/ros2_ws/config/waypoints.yaml') as f:
+            _data = yaml.safe_load(f)
+        goals = list(_data.get('waypoints', {}).keys())
         options = [g for g in goals if g.startswith(text)]
     try:
         return options[state]
@@ -115,6 +118,14 @@ def cli_loop(node: TB4CLI, stop_event: threading.Event):
             elif cmd == "stop":
                 node.send_cmd("stop")
                 print(c(C.YELLOW, "→ Sent stop"))
+            
+            elif cmd == "pause":
+                node.send_cmd("pause")
+                print(c(C.YELLOW, "→ Sent pause"))
+
+            elif cmd == "resume":
+                node.send_cmd("resume")
+                print(c(C.YELLOW, "→ Sent resume"))
 
             elif cmd == "status":
                 print(c(C.CYAN, f"Status: {node.get_status()}"))

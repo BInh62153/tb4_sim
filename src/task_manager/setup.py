@@ -4,6 +4,12 @@ from glob import glob
 
 package_name = 'task_manager'
 
+# Tính đường dẫn tuyệt đối đến thư mục config từ vị trí của setup.py,
+# tránh phụ thuộc vào cwd của colcon (colcon không chạy từ src/task_manager/).
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_CONFIG_DIR = os.path.join(_HERE, '..', '..', 'config')
+_config_yamls = glob(os.path.join(_CONFIG_DIR, '*.yaml'))
+
 setup(
     name=package_name,
     version='2.0.0',
@@ -11,7 +17,7 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'config'), glob('../../config/*.yaml')),
+        (os.path.join('share', package_name, 'config'), _config_yamls),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

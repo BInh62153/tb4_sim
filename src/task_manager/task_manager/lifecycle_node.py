@@ -122,7 +122,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
             'resume_battery_pct':   self.get_parameter('resume_battery_pct').value,
             'critical_battery_pct': self.get_parameter('critical_battery_pct').value,
         }
-        self._battery.__init__(self, self._slog, params)
+        self._battery.reconfigure(params)
         self._battery.start(
             on_low      = lambda: self._sm.dispatch(Event.BATTERY_LOW),
             on_critical  = lambda: self._sm.dispatch(Event.BATTERY_CRITICAL),

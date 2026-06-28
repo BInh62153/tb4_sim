@@ -94,11 +94,16 @@ cmd_stop() {
 }
 
 cmd_clean() {
-    warn "Xóa containers và volumes?"
+    warn "Xóa containers, networks và volumes?"
     read -p "Tiếp tục? (y/N): " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        dcomp down -v --rmi local 2>/dev/null || dcomp down -v
+        info "Đang tiến hành dọn dẹp..."
+        
+        # Thêm --profile "*" để dọn sạch tất cả các profile
+        # Bỏ 2>/dev/null để thấy được log của Docker Compose
+        dcomp --profile "*" down -v --remove-orphans
+        
         info "Đã dọn dẹp sạch sẽ hệ thống."
     else
         info "Hủy bỏ."
@@ -141,6 +146,23 @@ cmd_shell() {
         *)
             error "Không tìm thấy service tên: $svc. Chọn (sim/nav/task/rviz)" ;;
     esac
+}
+
+cmd_watchdog() {
+    info "Khởi động Watchdog theo dõi Healthcheck..."
+    while true; do
+        # Tìm các container có tiền tố tb4_ đang ở trạng thái unhealthy
+        unhealthy_containers=$(docker ps --filter "health=unhealthy" --format "{{.Names}}" | grep "^tb4_" || true)
+        
+        for container in $unhealthy_containers; do
+            if [ -n "$container" ]; then
+                warn "[WATCHDOG] Phát hiện $container bị treo (unhealthy). Đang khởi động lại..."
+                docker restart "$container"
+            fi
+        done
+        
+        sleep 10
+    done
 }
 
 cmd_save_map() {
@@ -208,5 +230,6 @@ case "$COMMAND" in
     logs)      cmd_logs "${1:-}" ;;
     shell)     cmd_shell "${1:-}" ;;
     save_map)  cmd_save_map "${1:-}" ;;
+    watchdog)  cmd_watchdog ;;
     help|*)    cmd_help ;;
 esac

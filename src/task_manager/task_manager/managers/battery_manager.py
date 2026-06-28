@@ -44,6 +44,28 @@ class BatteryManager:
 
     # ── Public API ──────────────────────────────────────────────────────────
 
+    def reconfigure(self, params: dict) -> None:
+        """Cập nhật thresholds mà không cần khởi tạo lại object.
+
+        Gọi thay vì self._battery.__init__(...) trong on_activate().
+        Nếu đang subscribe, dừng trước → reconfigure → start lại.
+        """
+        was_running = self._sub is not None
+        if was_running:
+            self.stop()
+
+        p = params or {}
+        self.low_pct      = float(p.get('low_battery_pct',      self.DEFAULT_LOW))
+        self.resume_pct   = float(p.get('resume_battery_pct',   self.DEFAULT_RESUME))
+        self.critical_pct = float(p.get('critical_battery_pct', self.DEFAULT_CRITICAL))
+        self.is_low      = False
+        self.is_critical = False
+        self.is_charging = False
+        self.percentage  = 100.0
+        self._on_low_cb      = None
+        self._on_critical_cb = None
+        self._on_charged_cb  = None
+
     def start(
         self,
         on_low:      Optional[Callable] = None,
@@ -57,6 +79,13 @@ class BatteryManager:
         self._sub = self._node.create_subscription(
             BatteryState, '/battery_state', self._cb, 10
         )
+
+    def set_charged_callback(self, cb: Optional[Callable]) -> None:
+        """Cập nhật callback 'đã sạc xong' sau khi start() đã được gọi.
+
+        DockManager dùng method này thay vì ghi trực tiếp vào _on_charged_cb.
+        """
+        self._on_charged_cb = cb
 
     def stop(self):
         if self._sub:
