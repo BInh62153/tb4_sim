@@ -152,7 +152,11 @@ services:
     depends_on:
       simulator:
         condition: service_healthy
+    environment:
+      <<: [*ros-env, *display]
+      PYTHONPATH: /opt/ros/humble/local/lib/python3.10/dist-packages  # ← thêm dòng này
     command: sleep infinity
+  
 
 volumes:
   # Fuel model cache dùng chung giữa tất cả containers

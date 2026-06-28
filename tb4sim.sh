@@ -83,9 +83,9 @@ cmd_rviz() {
 
 cmd_cli() {
     info "Mở Interactive CLI điều khiển TurtleBot4..."
-    # Đảm bảo container cli đang chạy
     dcomp up -d cli
-    docker exec -it tb4_cli python3 /ros2_ws/scripts/tb4_cli.py
+    docker exec -it tb4_cli bash -c \
+        "source /opt/ros/humble/setup.bash && python3 /ros2_ws/scripts/tb4_cli.py"
 }
 
 cmd_stop() {
