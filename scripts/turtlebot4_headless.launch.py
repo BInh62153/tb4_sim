@@ -68,7 +68,7 @@ def generate_launch_description():
     )
 
     # Clock bridge
-    from launch_ros.actions import Node
+    from launch_ros.actions import Node, SetParameter
     clock_bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -94,6 +94,10 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription(ARGUMENTS)
+    # FIX: force sim time on every node spawned by this launch (incl. robot_state_publisher
+    # + ros_gz bridges from turtlebot4_spawn). Without this they stamp TF with wall-clock time
+    # while SLAM consumes at sim time → "Failed to compute odom pose" + TF_OLD_DATA in rviz.
+    ld.add_action(SetParameter(name='use_sim_time', value=True))
     ld.add_action(ign_resource_path)
     ld.add_action(ign_gui_plugin_path)
     ld.add_action(ignition_gazebo)
