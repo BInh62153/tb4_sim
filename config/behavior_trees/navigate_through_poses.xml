@@ -16,8 +16,7 @@
           <RecoveryNode number_of_retries="1" name="ComputePathThroughPoses">
             <ComputePathThroughPoses goals="{goals}"
               path="{path}"
-              planner_id="{selected_planner}"
-              error_code_id="{compute_path_error_code}"/>
+              planner_id="{selected_planner}"/>
             <ReactiveFallback name="ComputePathThroughPosesRecovery">
               <GoalUpdated/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Context"

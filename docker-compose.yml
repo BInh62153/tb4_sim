@@ -70,7 +70,13 @@ services:
       ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py
       model:=standard world:=warehouse"
     healthcheck:
-      test: ["CMD", "/bin/bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list 2>/dev/null | grep -q /scan && ros2 topic list 2>/dev/null | grep -q /odom"]
+      # Check /scan (LIDAR) + /tf (odom→base_link từ diffdrive_controller)
+      # /tf check đảm bảo diffdrive_controller đã activated và publish transform
+      # timeout 8s để ros2 topic echo có thể nhận ít nhất 1 message
+      test: ["CMD", "/bin/bash", "-c",
+             "source /opt/ros/humble/setup.bash &&
+             ros2 topic list 2>/dev/null | grep -q /scan &&
+             timeout 8 ros2 topic echo /tf --once 2>/dev/null | grep -q odom"]
       interval: 15s
       timeout: 10s
       retries: 20
@@ -91,11 +97,16 @@ services:
       sleep 30 &&
       ros2 launch slam_toolbox online_async_launch.py params_file:=/ros2_ws/config/slam/slam_toolbox_params.yaml use_sim_time:=true"
     healthcheck:
-      test: ["CMD", "/bin/bash", "-c", "source /opt/ros/humble/setup.bash && ros2 topic list 2>/dev/null | grep -q /map"]
+      # /map: SLAM đang publish map
+      # /tf check map→odom: SLAM đã tính được transform đầu tiên
+      test: ["CMD", "/bin/bash", "-c",
+             "source /opt/ros/humble/setup.bash &&
+             ros2 topic list 2>/dev/null | grep -q /map &&
+             timeout 5 ros2 topic echo /tf --once 2>/dev/null | grep -q map"]
       interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 60s
+      timeout: 12s
+      retries: 15
+      start_period: 90s
 
   # ── 3. Navigation (Nav2 Stack) ──────────────────────────────────────────────
   navigation:

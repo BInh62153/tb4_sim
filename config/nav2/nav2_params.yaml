@@ -177,6 +177,7 @@ local_costmap:
       height: 3
       resolution: 0.05
       robot_radius: 0.22
+      transform_tolerance: 1.0
       plugins: ["obstacle_layer", "inflation_layer"]
       # FIXED: Xóa voxel_layer vì:
       #   1. Topic "/intel_realsense_r200_depth/points" là của TurtleBot3, TurtleBot4 dùng OAK-D
@@ -215,6 +216,12 @@ global_costmap:
       robot_radius: 0.22
       resolution: 0.05
       track_unknown_space: true
+      width: 20
+      height: 20
+      # rolling_window: false (default) — global costmap dùng fixed frame từ /map
+      # origin_x/y âm để robot spawn tại (0,0) nằm giữa costmap, không bị out of bounds
+      origin_x: -10.0
+      origin_y: -10.0
       
       plugins: ["static_layer","obstacle_layer", "inflation_layer"]
       
