@@ -90,7 +90,7 @@ cmd_cli() {
 
 cmd_stop() {
     info "Dừng tất cả containers..."
-    dcomp down
+    dcomp --profile "*" down
 }
 
 cmd_clean() {
@@ -150,14 +150,26 @@ cmd_shell() {
 
 cmd_watchdog() {
     info "Khởi động Watchdog theo dõi Healthcheck..."
+    declare -A last_restart=()
+    local cooldown_seconds=60
+
     while true; do
         # Tìm các container có tiền tố tb4_ đang ở trạng thái unhealthy
         unhealthy_containers=$(docker ps --filter "health=unhealthy" --format "{{.Names}}" | grep "^tb4_" || true)
         
         for container in $unhealthy_containers; do
             if [ -n "$container" ]; then
+                now=$(date +%s)
+                last=${last_restart[$container]:-0}
+                if (( now - last < cooldown_seconds )); then
+                    continue
+                fi
+
                 warn "[WATCHDOG] Phát hiện $container bị treo (unhealthy). Đang khởi động lại..."
                 docker restart "$container"
+                last_restart[$container]=$now
+            fi
+        done
             fi
         done
         

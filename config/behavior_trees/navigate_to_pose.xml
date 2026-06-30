@@ -46,10 +46,9 @@
             <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
               service_name="global_costmap/clear_entirely_global_costmap"/>
           </Sequence>
-          <Spin spin_dist="1.57" error_code_id="{spin_error_code}"/>
+          <Spin spin_dist="1.57"/>
           <Wait wait_duration="5.0"/>
-          <BackUp backup_dist="0.15" backup_speed="0.025"
-            error_code_id="{backup_error_code}"/>
+          <BackUp backup_dist="0.15" backup_speed="0.025"/>
         </RoundRobin>
       </ReactiveFallback>
     </RecoveryNode>

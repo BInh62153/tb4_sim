@@ -1,0 +1,308 @@
+igation  | [INFO] [planner_server-3]: process started with pid [49]
+tb4_navigation  | [INFO] [behavior_server-4]: process started with pid [51]
+tb4_navigation  | [INFO] [bt_navigator-5]: process started with pid [53]
+tb4_navigation  | [INFO] [waypoint_follower-6]: process started with pid [55]
+tb4_navigation  | [INFO] [velocity_smoother-7]: process started with pid [57]
+tb4_navigation  | [INFO] [lifecycle_manager-8]: process started with pid [59]
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.241770472] [planner_server]: 
+tb4_navigation  | [planner_server-3] 	planner_server lifecycle node launched. 
+tb4_navigation  | [planner_server-3] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [planner_server-3] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695488.242224781] [lifecycle_manager_navigation]: Creating
+tb4_navigation  | [waypoint_follower-6] [INFO] [1782695488.243253382] [waypoint_follower]: 
+tb4_navigation  | [waypoint_follower-6] 	waypoint_follower lifecycle node launched. 
+tb4_navigation  | [waypoint_follower-6] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [waypoint_follower-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [waypoint_follower-6] [INFO] [1782695488.244562807] [waypoint_follower]: Creating
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.244430755] [controller_server]: 
+tb4_navigation  | [controller_server-1] 	controller_server lifecycle node launched. 
+tb4_navigation  | [controller_server-1] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [controller_server-1] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695488.245967684] [lifecycle_manager_navigation]: Creating and initializing lifecycle service clients
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.250604740] [planner_server]: Creating
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.257888318] [controller_server]: Creating controller server
+tb4_navigation  | [smoother_server-2] [INFO] [1782695488.258136359] [smoother_server]: 
+tb4_navigation  | [smoother_server-2] 	smoother_server lifecycle node launched. 
+tb4_navigation  | [smoother_server-2] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [smoother_server-2] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [smoother_server-2] [INFO] [1782695488.260114679] [smoother_server]: Creating smoother server
+tb4_navigation  | [bt_navigator-5] [INFO] [1782695488.260226328] [bt_navigator]: 
+tb4_navigation  | [bt_navigator-5] 	bt_navigator lifecycle node launched. 
+tb4_navigation  | [bt_navigator-5] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [bt_navigator-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [bt_navigator-5] [INFO] [1782695488.260319650] [bt_navigator]: Creating
+tb4_navigation  | [velocity_smoother-7] [INFO] [1782695488.265946220] [velocity_smoother]: 
+tb4_navigation  | [velocity_smoother-7] 	velocity_smoother lifecycle node launched. 
+tb4_navigation  | [velocity_smoother-7] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [velocity_smoother-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.267477537] [global_costmap.global_costmap]: 
+tb4_navigation  | [planner_server-3] 	global_costmap lifecycle node launched. 
+tb4_navigation  | [planner_server-3] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [planner_server-3] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.270752975] [global_costmap.global_costmap]: Creating Costmap
+tb4_navigation  | [behavior_server-4] [INFO] [1782695488.279680476] [behavior_server]: 
+tb4_navigation  | [behavior_server-4] 	behavior_server lifecycle node launched. 
+tb4_navigation  | [behavior_server-4] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [behavior_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.289415442] [local_costmap.local_costmap]: 
+tb4_navigation  | [controller_server-1] 	local_costmap lifecycle node launched. 
+tb4_navigation  | [controller_server-1] 	Waiting on external lifecycle transitions to activate
+tb4_navigation  | [controller_server-1] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.290558504] [local_costmap.local_costmap]: Creating Costmap
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695488.418696241] [lifecycle_manager_navigation]: Starting managed nodes bringup...
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695488.418750510] [lifecycle_manager_navigation]: Configuring controller_server
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.418992775] [controller_server]: Configuring controller interface
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.419385433] [controller_server]: getting goal checker plugins..
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.419639862] [controller_server]: Controller frequency set to 20.0000Hz
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.419685807] [local_costmap.local_costmap]: Configuring
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.431847022] [local_costmap.local_costmap]: Using plugin "obstacle_layer"
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.437055427] [local_costmap.local_costmap]: Subscribed to Topics: scan
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.439596225] [local_costmap.local_costmap]: Initialized plugin "obstacle_layer"
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.439740426] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.440670312] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.446467996] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.447537162] [controller_server]: Created goal checker : precise_goal_checker of type nav2_controller::SimpleGoalChecker
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.448183947] [controller_server]: Controller Server has precise_goal_checker  goal checkers available.
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.451004790] [controller_server]: Created controller : FollowPath of type dwb_core::DWBLocalPlanner
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.452134347] [controller_server]: Setting transform_tolerance to 0.500000
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.460819283] [controller_server]: Using critic "RotateToGoal" (dwb_critics::RotateToGoalCritic)
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.461574359] [controller_server]: Critic plugin initialized
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.461718208] [controller_server]: Using critic "Oscillation" (dwb_critics::OscillationCritic)
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.462229909] [controller_server]: Critic plugin initialized
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.462376451] [controller_server]: Using critic "BaseObstacle" (dwb_critics::BaseObstacleCritic)
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.462603694] [controller_server]: Critic plugin initialized
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.462730802] [controller_server]: Using critic "GoalAlign" (dwb_critics::GoalAlignCritic)
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.463086730] [controller_server]: Critic plugin initialized
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.463221105] [controller_server]: Using critic "PathAlign" (dwb_critics::PathAlignCritic)
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.463559993] [controller_server]: Critic plugin initialized
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.463693936] [controller_server]: Using critic "PathDist" (dwb_critics::PathDistCritic)
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.463960476] [controller_server]: Critic plugin initialized
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.464099939] [controller_server]: Using critic "GoalDist" (dwb_critics::GoalDistCritic)
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.464336565] [controller_server]: Critic plugin initialized
+tb4_navigation  | [controller_server-1] [INFO] [1782695488.464354708] [controller_server]: Controller Server has FollowPath  controllers available.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695488.469030100] [lifecycle_manager_navigation]: Configuring smoother_server
+tb4_navigation  | [smoother_server-2] [INFO] [1782695488.469226617] [smoother_server]: Configuring smoother server
+tb4_navigation  | [smoother_server-2] [INFO] [1782695488.475505329] [smoother_server]: Created smoother : simple_smoother of type nav2_smoother::SimpleSmoother
+tb4_navigation  | [smoother_server-2] [INFO] [1782695488.476770113] [smoother_server]: Smoother Server has simple_smoother  smoothers available.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695488.480764745] [lifecycle_manager_navigation]: Configuring planner_server
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.480996111] [planner_server]: Configuring
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.481027560] [global_costmap.global_costmap]: Configuring
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.486004680] [global_costmap.global_costmap]: Using plugin "static_layer"
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.488833541] [global_costmap.global_costmap]: Subscribing to the map topic (/map) with transient local durability
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.489608510] [global_costmap.global_costmap]: Subscribing to updates
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.490342572] [global_costmap.global_costmap]: Initialized plugin "static_layer"
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.490362343] [global_costmap.global_costmap]: Using plugin "obstacle_layer"
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.491547266] [global_costmap.global_costmap]: Subscribed to Topics: scan
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.495256089] [global_costmap.global_costmap]: Initialized plugin "obstacle_layer"
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.495292123] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.496619411] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.510008646] [planner_server]: Created global planner plugin GridBased of type nav2_smac_planner/SmacPlannerHybrid
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.510049053] [planner_server]: Configuring GridBased of type SmacPlannerHybrid
+tb4_navigation  | [planner_server-3] [INFO] [1782695488.512136527] [planner_server]: Even sized heuristic lookup table size set 400.000000, increasing size by 1 to make odd
+tb4_navigation  | [planner_server-3] [INFO] [1782695498.073506853] [planner_server]: Configured plugin GridBased of type SmacPlannerHybrid with maximum iterations 1000000, max on approach iterations 1000, and allowing unknown traversal. Tolerance 0.50.Using motion model: Reeds-Shepp.
+tb4_navigation  | [planner_server-3] [INFO] [1782695498.073563377] [planner_server]: Planner Server has GridBased  planners available.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.082063185] [lifecycle_manager_navigation]: Configuring behavior_server
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.082352398] [behavior_server]: Configuring
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.089397117] [behavior_server]: Creating behavior plugin spin of type nav2_behaviors/Spin
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.090619649] [behavior_server]: Configuring spin
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.096332206] [behavior_server]: Creating behavior plugin backup of type nav2_behaviors/BackUp
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.097556271] [behavior_server]: Configuring backup
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.103086580] [behavior_server]: Creating behavior plugin drive_on_heading of type nav2_behaviors/DriveOnHeading
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.103996402] [behavior_server]: Configuring drive_on_heading
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.107736678] [behavior_server]: Creating behavior plugin assisted_teleop of type nav2_behaviors/AssistedTeleop
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.110320469] [behavior_server]: Configuring assisted_teleop
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.115730517] [behavior_server]: Creating behavior plugin wait of type nav2_behaviors/Wait
+tb4_navigation  | [behavior_server-4] [INFO] [1782695498.116902441] [behavior_server]: Configuring wait
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.120342358] [lifecycle_manager_navigation]: Configuring bt_navigator
+tb4_navigation  | [bt_navigator-5] [INFO] [1782695498.120550557] [bt_navigator]: Configuring
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.205766452] [lifecycle_manager_navigation]: Configuring waypoint_follower
+tb4_navigation  | [waypoint_follower-6] [INFO] [1782695498.205959930] [waypoint_follower]: Configuring
+tb4_navigation  | [waypoint_follower-6] [INFO] [1782695498.215637240] [waypoint_follower]: Created waypoint_task_executor : wait_at_waypoint of type nav2_waypoint_follower::WaitAtWaypoint
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.216793284] [lifecycle_manager_navigation]: Configuring velocity_smoother
+tb4_navigation  | [velocity_smoother-7] [INFO] [1782695498.217113715] [velocity_smoother]: Configuring velocity smoother
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.220424058] [lifecycle_manager_navigation]: Activating controller_server
+tb4_navigation  | [controller_server-1] [INFO] [1782695498.220664852] [controller_server]: Activating
+tb4_navigation  | [controller_server-1] [INFO] [1782695498.220713892] [local_costmap.local_costmap]: Activating
+tb4_navigation  | [controller_server-1] [INFO] [1782695498.220732239] [local_costmap.local_costmap]: Checking transform
+tb4_navigation  | [controller_server-1] [INFO] [1782695498.220844949] [local_costmap.local_costmap]: start
+tb4_navigation  | [controller_server-1] [INFO] [1782695498.421759660] [controller_server]: Creating bond (controller_server) to lifecycle manager.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.535231342] [lifecycle_manager_navigation]: Server controller_server connected with bond.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.535268751] [lifecycle_manager_navigation]: Activating smoother_server
+tb4_navigation  | [smoother_server-2] [INFO] [1782695498.535478541] [smoother_server]: Activating
+tb4_navigation  | [smoother_server-2] [INFO] [1782695498.535521040] [smoother_server]: Creating bond (smoother_server) to lifecycle manager.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.638964589] [lifecycle_manager_navigation]: Server smoother_server connected with bond.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695498.639033892] [lifecycle_manager_navigation]: Activating planner_server
+tb4_navigation  | [planner_server-3] [INFO] [1782695498.639424797] [planner_server]: Activating
+tb4_navigation  | [planner_server-3] [INFO] [1782695498.639493503] [global_costmap.global_costmap]: Activating
+tb4_navigation  | [planner_server-3] [INFO] [1782695498.639512875] [global_costmap.global_costmap]: Checking transform
+tb4_navigation  | [planner_server-3] [INFO] [1782695498.639541846] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695499.139597324] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695499.639586346] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695500.139599721] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695500.639646312] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695501.139639092] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695501.639595943] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695502.139614089] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695502.639593781] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695503.141764253] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695503.639617627] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695504.140385297] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695504.639610969] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695505.140627896] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695505.639684554] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695506.139618168] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695506.639621186] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695507.139589930] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695507.639645254] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695508.139615671] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695508.639588179] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Invalid frame ID "map" passed to canTransform argument target_frame - frame does not exist
+tb4_navigation  | [planner_server-3] [INFO] [1782695509.140323697] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 3.141000 but the earliest data is at time 3.272000, when looking up transform from frame [base_link] to frame [map]
+tb4_navigation  | [planner_server-3] [INFO] [1782695509.639595437] [global_costmap.global_costmap]: Timed out waiting for transform from base_link to map to become available, tf error: Lookup would require extrapolation into the past.  Requested time 3.222000 but the earliest data is at time 3.272000, when looking up transform from frame [base_link] to frame [map]
+tb4_navigation  | [planner_server-3] [INFO] [1782695510.139676492] [global_costmap.global_costmap]: start
+tb4_navigation  | [planner_server-3] [INFO] [1782695511.190297518] [planner_server]: Activating plugin GridBased of type SmacPlannerHybrid
+tb4_navigation  | [planner_server-3] [INFO] [1782695511.191975018] [planner_server]: Creating bond (planner_server) to lifecycle manager.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695511.296041371] [lifecycle_manager_navigation]: Server planner_server connected with bond.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695511.296115949] [lifecycle_manager_navigation]: Activating behavior_server
+tb4_navigation  | [behavior_server-4] [INFO] [1782695511.296549234] [behavior_server]: Activating
+tb4_navigation  | [behavior_server-4] [INFO] [1782695511.296595631] [behavior_server]: Activating spin
+tb4_navigation  | [behavior_server-4] [INFO] [1782695511.296619677] [behavior_server]: Activating backup
+tb4_navigation  | [behavior_server-4] [INFO] [1782695511.296639471] [behavior_server]: Activating drive_on_heading
+tb4_navigation  | [behavior_server-4] [INFO] [1782695511.296658981] [behavior_server]: Activating assisted_teleop
+tb4_navigation  | [behavior_server-4] [INFO] [1782695511.296677612] [behavior_server]: Activating wait
+tb4_navigation  | [behavior_server-4] [INFO] [1782695511.296700416] [behavior_server]: Creating bond (behavior_server) to lifecycle manager.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695511.400147972] [lifecycle_manager_navigation]: Server behavior_server connected with bond.
+tb4_navigation  | [lifecycle_manager-8] [INFO] [1782695511.400197543] [lifecycle_manager_navigation]: Activating bt_navigator
+tb4_navigation  | [bt_navigator-5] [INFO] [1782695511.400451368] [bt_navigator]: Activating
+tb4_navigation  | [bt_navigator-5] [ERROR] [1782695511.423613833] [bt_navigator]: Exception when loading BT: Possible typo? In the XML, you tried to remap port "error_code_id" in node [FollowPath / FollowPath], but the manifest of this node does not contain a port with this name.
+tb4_navigation  | [bt_navigator-5] [ERROR] [1782695511.423780041] [bt_navigator]: Error loading XML file: /ros2_ws/config/behavior_trees/navigate_through_poses.xml
+tb4_navigation  | [lifecycle_manager-8] [ERROR] [1782695511.424339662] [lifecycle_manager_navigation]: Failed to change state for node: bt_navigator
+tb4_navigation  | [lifecycle_manager-8] [ERROR] [1782695511.424393294] [lifecycle_manager_navigation]: Failed to bring up all requested nodes. Aborting bringup.
+tb4_navigation  | [planner_server-3] [WARN] [1782695520.139898904] [global_costmap.global_costmap]: Can't update static costmap layer, no map received
+tb4_navigation  | [planner_server-3] [WARN] [1782695530.139895492] [global_costmap.global_costmap]: Can't update static costmap layer, no map received
+tb4_navigation  | [planner_server-3] [WARN] [1782695540.139883402] [global_costmap.global_costmap]: Can't update static costmap layer, no map received
+tb4_navigation  | [planner_server-3] [WARN] [1782695550.139911836] [global_costmap.global_costmap]: Can't update static costmap layer, no map received
+tb4_navigation  | [planner_kipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329011791] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['front_left_top_weight_block_joint'] (Entity='222') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329015190] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['front_right_bottom_weight_block_joint'] (Entity='223') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329018346] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['front_right_top_weight_block_joint'] (Entity='224') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329021400] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['imu_joint'] (Entity='225') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329024811] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_intensity_front_center_left_joint'] (Entity='226') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329028007] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_intensity_front_center_right_joint'] (Entity='227') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329031226] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_intensity_front_left_joint'] (Entity='228') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329034566] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_intensity_front_right_joint'] (Entity='229') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329037671] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_intensity_left_joint'] (Entity='230') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329040802] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_intensity_right_joint'] (Entity='231') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329043848] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_intensity_side_left_joint'] (Entity='232') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329046788] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['ir_omni_joint'] (Entity='233') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329049818] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['mouse_joint'] (Entity='234') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329052937] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['front_left_tower_standoff_joint'] (Entity='235') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329056118] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['front_right_tower_standoff_joint'] (Entity='236') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329059239] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_camera_bracket_joint'] (Entity='237') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329062397] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_joint'] (Entity='238') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329065409] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_imu_joint'] (Entity='239') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329068634] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_left_camera_joint'] (Entity='240') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329071687] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_left_camera_optical_joint'] (Entity='241') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329074916] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_rgb_camera_joint'] (Entity='242') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329077938] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_rgb_camera_optical_joint'] (Entity='243') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329081132] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_right_camera_joint'] (Entity='244') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329084257] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['oakd_right_camera_optical_joint'] (Entity='245') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329087290] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['rear_left_tower_standoff_joint'] (Entity='246') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329090275] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['rear_right_tower_standoff_joint'] (Entity='247') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329111085] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['rplidar_joint'] (Entity='248') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.329114559] [gz_ros2_control]: [gz_ros2_control] Fixed joint ['tower_sensor_plate_joint'] (Entity='249') is skipped.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333475361] [gz_ros2_control]: The position_proportional_gain has been set to: 0.1
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333541622] [gz_ros2_control]: Loading joint: left_wheel_joint
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333554551] [gz_ros2_control]: 	State:
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333561789] [gz_ros2_control]: 		velocity
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333568676] [gz_ros2_control]: 		position
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333572778] [gz_ros2_control]: 	Command:
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333576332] [gz_ros2_control]: 		velocity
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333721600] [gz_ros2_control]: Loading sensor: imu
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333731920] [gz_ros2_control]: 	State:
+tb4_simulator  | [ign gazebo-1] [WARN] [1782695483.333741124] [gz_ros2_control]: IMU sensor 'imu' not found in hardware_info, skipping.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333818427] [resource_manager]: Initialize hardware 'left_wheel_controller' 
+tb4_simulator  | [ign gazebo-1] [WARN] [1782695483.333838622] [gz_ros2_control]: The ign_ros2_control plugin got renamed to gz_ros2_control.
+tb4_simulator  | [ign gazebo-1] Update the <ros2_control> tag and gazebo plugin to
+tb4_simulator  | [ign gazebo-1] <hardware>
+tb4_simulator  | [ign gazebo-1]   <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+tb4_simulator  | [ign gazebo-1] </hardware>
+tb4_simulator  | [ign gazebo-1] <gazebo>
+tb4_simulator  | [ign gazebo-1]   <plugin filename="gz_ros2_control-system"name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+tb4_simulator  | [ign gazebo-1]     ...
+tb4_simulator  | [ign gazebo-1]   </plugin>
+tb4_simulator  | [ign gazebo-1] </gazebo>
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333870313] [resource_manager]: Successful initialization of hardware 'left_wheel_controller'
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333893501] [resource_manager]: 'configure' hardware 'left_wheel_controller' 
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333895762] [gz_ros2_control]: System Successfully configured!
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333903586] [resource_manager]: Successful 'configure' of hardware 'left_wheel_controller'
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333906521] [resource_manager]: 'activate' hardware 'left_wheel_controller' 
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.333911099] [resource_manager]: Successful 'activate' of hardware 'left_wheel_controller'
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334482108] [gz_ros2_control]: The position_proportional_gain has been set to: 0.1
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334509861] [gz_ros2_control]: Loading joint: right_wheel_joint
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334515108] [gz_ros2_control]: 	State:
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334519335] [gz_ros2_control]: 		velocity
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334523556] [gz_ros2_control]: 		position
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334527068] [gz_ros2_control]: 	Command:
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334530487] [gz_ros2_control]: 		velocity
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334541317] [gz_ros2_control]: Loading sensor: imu
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334545384] [gz_ros2_control]: 	State:
+tb4_simulator  | [ign gazebo-1] [WARN] [1782695483.334548959] [gz_ros2_control]: IMU sensor 'imu' not found in hardware_info, skipping.
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334553623] [resource_manager]: Initialize hardware 'right_wheel_controller' 
+tb4_simulator  | [ign gazebo-1] [WARN] [1782695483.334563022] [gz_ros2_control]: The ign_ros2_control plugin got renamed to gz_ros2_control.
+tb4_simulator  | [ign gazebo-1] Update the <ros2_control> tag and gazebo plugin to
+tb4_simulator  | [ign gazebo-1] <hardware>
+tb4_simulator  | [ign gazebo-1]   <plugin>gz_ros2_control/GazeboSimSystem</plugin>
+tb4_simulator  | [ign gazebo-1] </hardware>
+tb4_simulator  | [ign gazebo-1] <gazebo>
+tb4_simulator  | [ign gazebo-1]   <plugin filename="gz_ros2_control-system"name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+tb4_simulator  | [ign gazebo-1]     ...
+tb4_simulator  | [ign gazebo-1]   </plugin>
+tb4_simulator  | [ign gazebo-1] </gazebo>
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334571333] [resource_manager]: Successful initialization of hardware 'right_wheel_controller'
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334579287] [resource_manager]: 'configure' hardware 'right_wheel_controller' 
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334581955] [gz_ros2_control]: System Successfully configured!
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334586822] [resource_manager]: Successful 'configure' of hardware 'right_wheel_controller'
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334589324] [resource_manager]: 'activate' hardware 'right_wheel_controller' 
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334593050] [resource_manager]: Successful 'activate' of hardware 'right_wheel_controller'
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.334596525] [gz_ros2_control]: Loading controller_manager
+tb4_simulator  | [ign gazebo-1] [Wrn] [OBJLoader.cc:91] Both `d` and `Tr` parameters defined for "Chair". Use the value of `d` for dissolve (line 8 in .mtl.)
+tb4_simulator  | [ign gazebo-1] 
+tb4_simulator  | [ign gazebo-1] [ERROR] [1782695483.539927688] [gz_ros2_control]: Desired controller update period (0.001 s) is faster than the gazebo simulation period (0.003 s).
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.559679360] [controller_manager]: Loading controller 'joint_state_broadcaster'
+tb4_simulator  | [spawner-32] [INFO] [1782695483.641281632] [spawner_joint_state_broadcaster]: Loaded joint_state_broadcaster
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.642392762] [controller_manager]: Configuring controller 'joint_state_broadcaster'
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695483.642573808] [joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+tb4_simulator  | [ign gazebo-1] [Wrn] [ColladaLoader.cc:2394] Triangle input semantic: 'COLOR' is currently not supported
+tb4_simulator  | [ign gazebo-1] [Wrn] [ColladaLoader.cc:2394] Triangle input semantic: 'COLOR' is currently not supported
+tb4_simulator  | [ign gazebo-1] [Wrn] [OgreGpuRays.cc:258] Horizontal FOV for GPU rays is capped at 180 degrees.
+tb4_simulator  | [parameter_bridge-24] [INFO] [1782695486.025675355] [buttons_msg_bridge]: Creating GZ->ROS Bridge: [/create3_buttons (ignition.msgs.Int32) -> /create3_buttons (std_msgs/msg/Int32)] (Lazy 0)
+tb4_simulator  | [spawner-32] [INFO] [1782695486.207516804] [spawner_joint_state_broadcaster]: Configured and activated joint_state_broadcaster
+tb4_simulator  | [parameter_bridge-9] [INFO] [1782695486.212726337] [cmd_vel_bridge]: Passing message from ROS geometry_msgs/msg/Twist to Gazebo gz.msgs.Twist (showing msg only once per type)
+tb4_simulator  | [turtlebot4_node-30] [INFO] [1782695486.299104275] [turtlebot4_node]: OAKD stopped
+tb4_simulator  | [turtlebot4_node-30] [INFO] [1782695486.299141811] [turtlebot4_node]: RPLIDAR stopped
+tb4_simulator  | [INFO] [spawner-32]: process has finished cleanly [pid 109]
+tb4_simulator  | [INFO] [spawner-46]: process started with pid [905]
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695486.577529795] [controller_manager]: Loading controller 'diffdrive_controller'
+tb4_simulator  | [spawner-46] [INFO] [1782695488.590566410] [spawner_diffdrive_controller]: Loaded diffdrive_controller
+tb4_simulator  | [ign gazebo-1] [INFO] [1782695488.591863856] [controller_manager]: Configuring controller 'diffdrive_controller'
+tb4_simulator  | [ign gazebo-1] [WARN] [1782695488.657153585] [diffdrive_controller]: Can't accept new commands. subscriber is inactive
+tb4_simulator  | [spawner-46] [INFO] [1782695488.664351047] [spawner_diffdrive_controller]: Configured and activated diffdrive_controller
+tb4_simulator  | [INFO] [spawner-46]: process has finished cleanly [pid 905]
+tb4_simulator  | [turtlebot4_node-30] [ERROR] [1782695516.614663711] [turtlebot4_node]: Service oakd/stop_camera unavailable.
+tb4_simulator  | [turtlebot4_node-30] [ERROR] [1782695516.624888487] [turtlebot4_node]: Service stop_motor unavailable.
+tb4_navigation  | [planner_server-3] [WARN] [1782695720.139865189] [global_costmap.global_costmap]: Can't update static costmap layer, no map received
+tb4_navigation  | [planner_server-3] [WARN] [1782695730.139965111] [global_costmap.global_costmap]: Can't update static costmap layer, no map received
+_slam  | [async_slam_toolbox_node-1] [WARN] [1782695739.993838537] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.074884484] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.208609955] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.280751174] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.410318055] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.488107963] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.617331713] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.685879389] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.817546872] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695740.893656731] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695741.028609008] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695741.105957257] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [async_slam_toolbox_node-1] [WARN] [1782695741.227836680] [slam_toolbox]: Failed to compute odom pose
+tb4_slam  | [as
