@@ -70,15 +70,21 @@ services:
       ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py
       model:=standard world:=warehouse"
     healthcheck:
-      # Check /scan (LIDAR) + /tf (odom→base_link từ diffdrive_controller)
-      # /tf check đảm bảo diffdrive_controller đã activated và publish transform
-      # timeout 8s để ros2 topic echo có thể nhận ít nhất 1 message
+      # Check /scan (LIDAR) + /tf (odom→base_link) + world đã load ổn định
+      # FIX: thêm check sim time > 5s để đảm bảo world (walls/shelves) đã load xong
+      #      trước khi cho phép slam/nav start — tránh costmap build từ scan rỗng
+      #      lúc world model còn đang spawn (lý do gây "Nav2 nhảy vào trước khi
+      #      Gazebo load xong map warehouse")
       test: ["CMD", "/bin/bash", "-c",
              "source /opt/ros/humble/setup.bash &&
              ros2 topic list 2>/dev/null | grep -q /scan &&
-             timeout 8 ros2 topic echo /tf --once 2>/dev/null | grep -q odom"]
+             timeout 5 ros2 topic echo /tf --once 2>/dev/null | grep -q odom &&
+             CLOCK_SEC=$(timeout 5 ros2 topic echo /clock --once 2>/dev/null | grep -E '^ *sec:' | head -1 | awk '{print $2}') &&
+             [ \"${CLOCK_SEC:-0}\" -ge 5 ] &&
+             SCAN_RANGES=$(timeout 5 ros2 topic echo /scan --once 2>/dev/null | awk '/^ranges:/{f=1;next}/^intensities:/{f=0}f' | grep -c '^- ') &&
+             [ \"${SCAN_RANGES:-0}\" -gt 50 ]"]
       interval: 15s
-      timeout: 10s
+      timeout: 25s
       retries: 20
       start_period: 300s
 
@@ -151,7 +157,7 @@ services:
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       sleep 5 &&
-      ign gazebo --gui-config /dev/null"
+      ign gazebo -g"
 
 
   rviz:

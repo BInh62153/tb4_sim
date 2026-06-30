@@ -78,6 +78,7 @@ cmd_full() {
 
 cmd_rviz() {
     info "Khởi động thêm RViz2 visualizer..."
+    xhost +local:docker
     dcomp --profile rviz up -d
 }
 
