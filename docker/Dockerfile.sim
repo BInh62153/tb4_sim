@@ -33,6 +33,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     xterm \
     xvfb \
     mesa-utils \
+    ros-humble-libg2o \
     python3-pip \
     python3-setuptools \
     python3-wheel \
@@ -81,11 +82,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-nav2-mppi-controller \
     ros-humble-nav2-velocity-smoother \
     ros-humble-nav2-behaviors \
-    ros-humble-teb-local-planner \
+    ros-humble-nav2-core \
+    #ros-humble-teb-local-planner \
 \
 # SLAM
     ros-humble-slam-toolbox \
-    ros-humble-explore-lite \
+    #ros-humble-explore-lite \
 \
 # ros2_control
     ros-humble-ros2-control \
@@ -113,6 +115,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-ros-gz-interfaces \
     ros-humble-ros-gz-sim \
 \
+# === BỔ SUNG CÁC GÓI DƯỚI ĐÂY ĐỂ BIÊN DỊCH TEB & M-EXPLORE TỪ SOURCE ===
+    ros-humble-rosidl-default-generators \
+    ros-humble-rosidl-default-runtime \
+    ros-humble-cv-bridge \
+    ros-humble-vision-opencv \
+    ros-humble-dwb-critics \
+    ros-humble-nav-2d-utils \
+    libsuitesparse-dev \
+    libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Python Packages
@@ -140,12 +151,13 @@ RUN apt-get update && \
         -y && \
     rm -rf /var/lib/apt/lists/*
 
-# Build
+# Build workspace packages (costmap_converter → teb → explore → task_manager)
 RUN source /opt/ros/humble/setup.bash && \
     colcon build \
         --symlink-install \
-        --event-handlers console_direct+
-
+        --event-handlers console_direct+ \
+        --packages-up-to teb_local_planner explore_lite task_manager \
+        --cmake-args -DCMAKE_CXX_STANDARD=17
 
 # Bash
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
