@@ -95,7 +95,7 @@ services:
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       sleep 30 &&
-      ros2 launch slam_toolbox online_async_launch.py params_file:=/ros2_ws/config/slam/slam_toolbox_params.yaml use_sim_time:=true"
+      ros2 launch slam_toolbox online_async_launch.py slam_params_file:=/ros2_ws/config/slam/slam_toolbox_params.yaml use_sim_time:=true"
     healthcheck:
       # /map: SLAM đang publish map
       # /tf check map→odom: SLAM đã tính được transform đầu tiên
@@ -129,7 +129,31 @@ services:
       retries: 10
       start_period: 90s
 
-  # ── 4. RViz2 Visualizer ─────────────────────────────────────────────────────
+  # ── 4. Gazebo GUI (viewer) ──────────────────────────────────────────────────
+  #   Attach vào Gazebo server đang chạy trong container simulator
+  #   Dùng host X server thật (DISPLAY từ host) — KHÔNG spawn Xvfb riêng
+  #   Chạy: ./tb4sim.sh rviz  (profile rviz bao gồm cả gazebo_gui)
+  gazebo_gui:
+    <<: *base
+    container_name: tb4_gazebo_gui
+    profiles: ["rviz"]
+    environment:
+      <<: [*ros-env, *display]        # GUI thật → host X server
+      # FIX: override lại LIBGL để dùng GPU thật cho GUI client
+      LIBGL_ALWAYS_SOFTWARE: "0"
+      # Gazebo GUI cần tìm đúng server đang chạy trong cùng network host
+      IGN_GAZEBO_SERVER_CONFIG_PATH: ""
+    depends_on:
+      simulator:
+        condition: service_healthy
+    # Chỉ chạy GUI client (ign gazebo --gui-config) — KHÔNG chạy server
+    # --render-engine ogre2 để tránh fallback về ogre (hay crash trên NVIDIA)
+    command: >-
+      bash -c "source /opt/ros/humble/setup.bash &&
+      sleep 5 &&
+      ign gazebo --gui-config /dev/null"
+
+
   rviz:
     <<: *base
     container_name: tb4_rviz

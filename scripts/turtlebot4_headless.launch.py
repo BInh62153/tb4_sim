@@ -20,6 +20,10 @@ ARGUMENTS = [
                           description='Turtlebot4 Model'),
     DeclareLaunchArgument('namespace', default_value='',
                           description='Robot namespace'),
+    # FIX: thêm arg gui để toggle headless/GUI mode
+    # Default headless (-s) — truyền gui:=true khi cần debug Gazebo trực tiếp
+    DeclareLaunchArgument('gui', default_value='false',
+                          description='Run Gazebo with GUI (true) or headless server-only (false)'),
 ]
 for pose_element in ['x', 'y', 'z', 'yaw']:
     ARGUMENTS.append(DeclareLaunchArgument(pose_element, default_value='0.0',
@@ -57,12 +61,19 @@ def generate_launch_description():
     pkg_ros_gz_sim = get_package_share_directory('ros_gz_sim')
     gz_sim_launch = os.path.join(pkg_ros_gz_sim, 'launch', 'gz_sim.launch.py')
 
-    # Chạy Gazebo server-only (-s) + run immediately (-r) + verbose 2
-    # KHÔNG có --gui-config → không cần DISPLAY
+    from launch.conditions import IfCondition, UnlessCondition
+    from launch.substitutions import PythonExpression
+
+    # Chạy Gazebo server-only (-s) khi gui:=false (default headless)
+    # Chạy full Gazebo (server + client) khi gui:=true (debug mode)
     ignition_gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(gz_sim_launch),
         launch_arguments=[
-            ('gz_args', [LaunchConfiguration('world'), '.sdf -r -v 2 -s']),
+            # FIX: nếu gui=true thì bỏ -s, nếu gui=false (headless) thì thêm -s
+            ('gz_args', PythonExpression([
+                '"', LaunchConfiguration('world'), '.sdf -r -v 2"',
+                ' + (" -s" if "', LaunchConfiguration('gui'), '" == "false" else "")'
+            ])),
             ('gz_version', '6'),
         ]
     )
