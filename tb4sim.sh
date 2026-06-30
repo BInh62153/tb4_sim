@@ -13,7 +13,7 @@
 #    ./tb4sim.sh shell [svc]  → Shell vào container
 #    ./tb4sim.sh stop         → Dừng tất cả
 #    ./tb4sim.sh clean        → Xóa containers + volumes
-
+#    ./tb4sim.sh watchdog     → container heathy check 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

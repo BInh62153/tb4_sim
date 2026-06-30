@@ -79,10 +79,10 @@ services:
              "source /opt/ros/humble/setup.bash &&
              ros2 topic list 2>/dev/null | grep -q /scan &&
              timeout 5 ros2 topic echo /tf --once 2>/dev/null | grep -q odom &&
-             CLOCK_SEC=$(timeout 5 ros2 topic echo /clock --once 2>/dev/null | grep -E '^ *sec:' | head -1 | awk '{print $2}') &&
-             [ \"${CLOCK_SEC:-0}\" -ge 5 ] &&
-             SCAN_RANGES=$(timeout 5 ros2 topic echo /scan --once 2>/dev/null | awk '/^ranges:/{f=1;next}/^intensities:/{f=0}f' | grep -c '^- ') &&
-             [ \"${SCAN_RANGES:-0}\" -gt 50 ]"]
+             CLOCK_SEC=$$(timeout 5 ros2 topic echo /clock --once 2>/dev/null | grep -E '^ *sec:' | head -1 | awk '{print $$2}') &&
+             [ \"$${CLOCK_SEC:-0}\" -ge 5 ] &&
+             SCAN_RANGES=$$(timeout 5 ros2 topic echo /scan --once 2>/dev/null | awk '/^ranges:/{f=1;next}/^intensities:/{f=0}f' | grep -c '^- ') &&
+             [ \"$${SCAN_RANGES:-0}\" -gt 50 ]"]
       interval: 15s
       timeout: 25s
       retries: 20
