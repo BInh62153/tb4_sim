@@ -69,6 +69,7 @@ class WaypointSender(Node):
         super().__init__('waypoint_sender')
         self.mode = mode
         self.targets = targets
+        self.algo = algo # Lưu lại thuật toán lựa chọn
 
         self._through_client = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
         self._to_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
@@ -88,7 +89,7 @@ class WaypointSender(Node):
             self._send_through(seq)
 
     def _send_single(self, wp_name: str):
-        self.get_logger().info(f'Gửi goal: {wp_name}')
+        self.get_logger().info(f'Gửi goal: {wp_name} bằng thuật toán: {self.algo}')
         if not self._to_client.wait_for_server(timeout_sec=30.0):
             self.get_logger().error('NavigateToPose server không khả dụng!')
             return
@@ -96,6 +97,9 @@ class WaypointSender(Node):
         wp = self.waypoints[wp_name]
         goal = NavigateToPose.Goal()
         goal.pose = make_pose(wp, self.get_clock())
+
+        algo_map = {'dwa': 'FollowPathDWA', 'teb': 'FollowPathTEB', 'pp': 'FollowPathPP', 'stanley': 'FollowPathStanley'}
+        goal.controller_id = algo_map.get(self.algo, 'FollowPathDWA')
 
         future = self._to_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, future)
@@ -123,6 +127,9 @@ class WaypointSender(Node):
         goal = NavigateThroughPoses.Goal()
         goal.poses = [make_pose(self.waypoints[n], self.get_clock()) for n in valid]
 
+        algo_map = {'dwa': 'FollowPathDWA', 'teb': 'FollowPathTEB', 'pp': 'FollowPathPP', 'stanley': 'FollowPathStanley'}
+        goal.controller_id = algo_map.get(self.algo, 'FollowPathDWA')
+
         future = self._through_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, future)
         goal_handle = future.result()
@@ -142,17 +149,19 @@ def main():
     group.add_argument('--goto', metavar='WP', help='Đi đến 1 waypoint')
     group.add_argument('--waypoints', nargs='+', metavar='WP', help='Đi qua nhiều waypoints')
     group.add_argument('--patrol', action='store_true', help='Dùng patrol_sequence từ YAML')
-
+    
+    parser.add_argument('--algo', default='dwa', choices=['dwa', 'teb', 'pp', 'stanley'], help='Chọn thuật toán điều khiển')
+    
     args = parser.parse_args()
 
     rclpy.init()
 
     if args.goto:
-        node = WaypointSender('goto', [args.goto])
+        node = WaypointSender('goto', [args.goto], args.algo)
     elif args.waypoints:
-        node = WaypointSender('through', args.waypoints)
+        node = WaypointSender('through', args.waypoints, args.algo)
     else:
-        node = WaypointSender('patrol', [])
+        node = WaypointSender('patrol', [], args.algo)
 
     try:
         node.run()

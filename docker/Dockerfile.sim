@@ -81,9 +81,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-nav2-mppi-controller \
     ros-humble-nav2-velocity-smoother \
     ros-humble-nav2-behaviors \
+    ros-humble-teb-local-planner \
 \
 # SLAM
     ros-humble-slam-toolbox \
+    ros-humble-explore-lite \
 \
 # ros2_control
     ros-humble-ros2-control \

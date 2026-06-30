@@ -116,7 +116,9 @@ controller_server:
     failure_tolerance: 0.3
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["precise_goal_checker"]
-    controller_plugins: ["FollowPath"]
+    controller_plugins: ["FollowPathDWA", "FollowPathTEB", "FollowPathPP", "FollowPathStanley"]
+
+
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.5
@@ -126,7 +128,7 @@ controller_server:
       xy_goal_tolerance: 0.25
       yaw_goal_tolerance: 0.25
       stateful: true
-    FollowPath:
+    FollowPathDWA:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: true
       min_vel_x: 0.0
@@ -162,6 +164,28 @@ controller_server:
       PathAlign.scale: 32.0
       PathDist.scale: 32.0
       RotateToGoal.scale: 32.0
+    FollowPathPP:
+      plugin: "nav2_regulated_pure_pursuit_controller::RegulatedPurePursuitController"
+      desired_linear_vel: 0.31
+      max_angular_vel: 1.9
+      lookahead_dist: 0.6
+      use_velocity_scaled_lookahead_dist: true
+      min_lookahead_dist: 0.3
+      max_lookahead_dist: 0.9
+      lookahead_time: 1.5
+    FollowPathTEB:
+      plugin: "teb_local_planner::TebLocalPlannerROS"
+      max_vel_x: 0.31
+      max_vel_theta: 1.9
+      acc_lim_x: 2.5
+      acc_lim_theta: 3.2
+      min_turning_radius: 0.0 # Robot vi sai xoay tại chỗ được
+      footprint_model.type: "circular"
+      footprint_model.radius: 0.22
+    FollowPathStanley:
+      plugin: "nav2_stanley_controller::StanleyController"
+      k_gain: 1.0
+      k_soft: 0.1
 
 local_costmap:
   local_costmap:

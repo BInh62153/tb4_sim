@@ -19,7 +19,7 @@ def c(color, msg):
     return f"{color}{msg}{C.END}"
 
 # ====== COMMAND LIST ======
-COMMANDS = ["goto", "patrol", "stop", "status", "help", "clear", "exit"]
+COMMANDS = ["goto", "patrol", "explore", "stop", "pause", "resume", "status", "help", "clear", "exit"]
 
 # ====== AUTOCOMPLETE ======
 def completer(text, state):
@@ -67,24 +67,28 @@ class TB4CLI(Node):
 
 # ====== HELP ======
 def print_help():
-    print(c(C.CYAN, "\nCác lệnh có sẵn:"))
+    print(c(C.CYAN, "\n=== HỆ THỐNG THỬ NGHIỆM THUẬT TOÁN TURTLEBOT4 ==="))
     cmds = [
-        ("goto <tên>",  "Di chuyển đến waypoint  (vd: goto diem_A)"),
-        ("patrol",      "Bắt đầu tuần tra tự động"),
-        ("stop",        "Dừng robot ngay lập tức"),
-        ("status",      "Xem trạng thái hiện tại"),
-        ("help",        "Hiện menu này"),
-        ("clear",       "Xóa màn hình"),
-        ("exit",        "Thoát CLI"),
+        ("goto <đích> [algo]", "Di chuyển đến waypoint bằng thuật toán (Mặc định: dwa)"),
+        ("patrol [algo]",     "Tuần tra tự động bằng thuật toán chọn trước"),
+        ("explore [algo]",    "Bật Frontier Exploration (Khám phá bản đồ) + thuật toán lái"),
+        ("stop",              "Dừng robot ngay lập tức"),
+        ("pause",             "Tạm dừng tác vụ hành trình"),
+        ("resume",            "Tiếp tục hành trình đang hoãn"),
+        ("status",            "Xem trạng thái hiện tại"),
+        ("help",              "Hiện menu hướng dẫn này"),
+        ("clear",             "Xóa màn hình dòng lệnh"),
+        ("exit",              "Thoát giao diện điều khiển CLI"),
     ]
+    print(c(C.DIM, "Các thuật toán (algo) hỗ trợ thử nghiệm: dwa | teb | pp | stanley\n"))
     for cmd, desc in cmds:
-        print(f"  {c(C.YELLOW, cmd.ljust(16))} {c(C.DIM, desc)}")
+        print(f"  {c(C.YELLOW, cmd.ljust(22))} {c(C.DIM, desc)}")
     print()
 
 # ====== CLI LOOP ======
 def cli_loop(node: TB4CLI, stop_event: threading.Event):
-    print(c(C.GREEN, "=== TB4 CLI PRO ==="))
-    print(c(C.DIM, "Gõ 'help' để xem danh sách lệnh, Tab để autocomplete\n"))
+    print(c(C.GREEN, "=== TB4 MULTI-MODULE CLI PRO ==="))
+    print(c(C.DIM, "Gõ 'help' để xem danh sách lệnh, Nhấn Tab để tự động điền (Autocomplete)\n"))
 
     while not stop_event.is_set():
         try:
@@ -93,44 +97,60 @@ def cli_loop(node: TB4CLI, stop_event: threading.Event):
                 continue
 
             readline.add_history(cmd)
+            parts = cmd.split()
+            base_cmd = parts[0].lower()
 
-            if cmd == "exit":
+            if base_cmd == "exit":
                 print("Bye.")
                 break
 
-            elif cmd == "help":
+            elif base_cmd == "help":
                 print_help()
 
-            elif cmd == "clear":
+            elif base_cmd == "clear":
                 print("\033[2J\033[H", end="")   # ANSI clear screen
-                print(c(C.GREEN, "=== TB4 CLI PRO ===\n"))
+                print(c(C.GREEN, "=== TB4 MULTI-MODULE CLI PRO ===\n"))
 
-            elif cmd.startswith("goto "):
-                parts = cmd.split(" ", 1)
-                if len(parts) < 2 or not parts[1].strip():
-                    print(c(C.RED, "Dùng: goto <tên_waypoint>"))
+            elif base_cmd == "goto":
+                if len(parts) < 2:
+                    print(c(C.RED, "Dùng: goto <tên_waypoint> [dwa/teb/pp/stanley]"))
                 else:
-                    goal = parts[1].strip()
-                    node.send_cmd(f"goto:{goal}")
-                    print(c(C.YELLOW, f"→ Sent goto: {goal}"))
+                    goal = parts[1]
+                    algo = parts[2].lower() if len(parts) > 2 else "dwa"
+                    if algo not in ['dwa', 'teb', 'pp', 'stanley']:
+                        print(c(C.RED, f"Thuật toán '{algo}' không hỗ trợ! Chạy mặc định dwa."))
+                        algo = "dwa"
+                    # Gửi chuỗi định dạng cấu trúc dạng: goto:diem_A:teb
+                    node.send_cmd(f"goto:{goal}:{algo}")
+                    print(c(C.YELLOW, f"→ Sent goto: Đang đến {goal} bằng [{algo.upper()}]"))
 
-            elif cmd == "patrol":
-                node.send_cmd("patrol")
-                print(c(C.YELLOW, "→ Sent patrol"))
+            elif base_cmd == "patrol":
+                algo = parts[1].lower() if len(parts) > 1 else "dwa"
+                if algo not in ['dwa', 'teb', 'pp', 'stanley']:
+                    algo = "dwa"
+                node.send_cmd(f"patrol:{algo}")
+                print(c(C.YELLOW, f"→ Sent patrol: Bắt đầu tuần tra bằng [{algo.upper()}]"))
 
-            elif cmd == "stop":
+            elif base_cmd == "explore":
+                algo = parts[1].lower() if len(parts) > 1 else "dwa"
+                if algo not in ['dwa', 'teb', 'pp', 'stanley']:
+                    algo = "dwa"
+                node.send_cmd(f"explore:{algo}")
+                print(c(C.YELLOW, f"→ Sent explore: Bật Frontier Exploration bằng bộ lái [{algo.upper()}]"))
+
+            elif base_cmd == "stop":
                 node.send_cmd("stop")
-                print(c(C.YELLOW, "→ Sent stop"))
+                print(c(C.YELLOW, f"→ Sent stop"))
             
-            elif cmd == "pause":
+            elif base_cmd == "pause":
                 node.send_cmd("pause")
                 print(c(C.YELLOW, "→ Sent pause"))
 
-            elif cmd == "resume":
+            elif base_cmd == "resume":
                 node.send_cmd("resume")
                 print(c(C.YELLOW, "→ Sent resume"))
 
-            elif cmd == "status":
+            elif base_cmd == "status":
                 print(c(C.CYAN, f"Status: {node.get_status()}"))
 
             else:
@@ -140,7 +160,6 @@ def cli_loop(node: TB4CLI, stop_event: threading.Event):
             print("\nExit.")
             break
         except EOFError:
-            # Ctrl+D
             print("\nEOF. Exit.")
             break
 
@@ -156,13 +175,12 @@ def main():
     node = TB4CLI()
     stop_event = threading.Event()
 
-    # Spin thread: dừng khi stop_event được set
     def spin_until_stopped():
         while not stop_event.is_set():
             try:
                 rclpy.spin_once(node, timeout_sec=0.1)
             except rclpy.executors.ExternalShutdownException:
-                pass # Bỏ qua lỗi khi tắt chương trình
+                pass
 
     spin_thread = threading.Thread(target=spin_until_stopped, daemon=True)
     spin_thread.start()
