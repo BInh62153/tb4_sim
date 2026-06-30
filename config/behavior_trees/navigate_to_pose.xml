@@ -17,8 +17,7 @@
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
             <ComputePathToPose goal="{goal}"
               path="{path}"
-              planner_id="{selected_planner}"
-              error_code_id="{compute_path_error_code}"/>
+              planner_id="{selected_planner}"/>
             <ReactiveFallback name="ComputePathRecovery">
               <GoalUpdated/>
               <ClearEntireCostmap name="ClearGlobalCostmap-Context"
@@ -28,8 +27,7 @@
         </RateController>
         <RecoveryNode number_of_retries="1" name="FollowPath">
           <FollowPath path="{path}"
-            controller_id="{selected_controller}"
-            error_code_id="{follow_path_error_code}"/>
+            controller_id="{selected_controller}"/>
           <ReactiveFallback name="FollowPathRecovery">
             <GoalUpdated/>
             <ClearEntireCostmap name="ClearLocalCostmap-Context"

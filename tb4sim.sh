@@ -170,9 +170,8 @@ cmd_watchdog() {
                 last_restart[$container]=$now
             fi
         done
-            fi
-        done
         
+        # Cực kỳ quan trọng: Thêm thời gian nghỉ để không chiếm dụng 100% CPU
         sleep 10
     done
 }

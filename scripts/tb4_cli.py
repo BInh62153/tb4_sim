@@ -29,8 +29,11 @@ def completer(text, state):
         options = [cmd for cmd in COMMANDS if cmd.startswith(text)]
     else:
         import yaml
-        with open('/ros2_ws/config/waypoints.yaml') as f:
-            _data = yaml.safe_load(f)
+        try:
+            with open('/ros2_ws/config/waypoints.yaml') as f:
+                _data = yaml.safe_load(f) or {}
+        except (OSError, yaml.YAMLError):
+            _data = {}
         goals = list(_data.get('waypoints', {}).keys())
         options = [g for g in goals if g.startswith(text)]
     try:
@@ -156,7 +159,10 @@ def main():
     # Spin thread: dừng khi stop_event được set
     def spin_until_stopped():
         while not stop_event.is_set():
-            rclpy.spin_once(node, timeout_sec=0.1)
+            try:
+                rclpy.spin_once(node, timeout_sec=0.1)
+            except rclpy.executors.ExternalShutdownException:
+                pass # Bỏ qua lỗi khi tắt chương trình
 
     spin_thread = threading.Thread(target=spin_until_stopped, daemon=True)
     spin_thread.start()
