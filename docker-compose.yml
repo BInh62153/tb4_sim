@@ -9,7 +9,7 @@ x-ros-env: &ros-env
   ROS_DOMAIN_ID: "0"
   RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
   CYCLONEDDS_URI: file:///ros2_ws/config/cyclonedds/cyclonedds.xml
-  TURTLEBOT4_MODEL: standard
+  TURTLEBOT4_MODEL: lite
   IGN_GAZEBO_RESOURCE_PATH: /opt/ros/humble/share
   GZ_FUEL_CACHE_DIR: /root/.ignition/fuel
   IGN_GAZEBO_SERVER_CONFIG_PATH: ""
@@ -68,7 +68,7 @@ services:
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py
-      model:=standard world:=warehouse"
+      model:=lite world:=warehouse"
     healthcheck:
       # Check /scan (LIDAR) + /tf (odom→base_link) + world đã load ổn định
       # FIX: thêm check sim time > 5s để đảm bảo world (walls/shelves) đã load xong
@@ -188,7 +188,15 @@ services:
       bash -c "source /opt/ros/humble/setup.bash &&
       source /ros2_ws/install/setup.bash &&
       sleep 15 &&
-      ros2 run task_manager task_manager_lifecycle --ros-args -p use_sim_time:=true -p waypoints_file:=/ros2_ws/config/waypoints.yaml"
+      ros2 run task_manager task_manager_lifecycle --ros-args -p use_sim_time:=true -p waypoints_file:=/ros2_ws/config/waypoints.yaml &
+      TM_PID=$$! &&
+      ( for i in $$(seq 1 30); do
+          ros2 lifecycle list /task_manager_lifecycle_node >/dev/null 2>&1 && break
+          sleep 1
+        done
+        ros2 lifecycle set /task_manager_lifecycle_node configure &&
+        ros2 lifecycle set /task_manager_lifecycle_node activate ) &
+      wait $$TM_PID"
 
   # ── 6. Interactive CLI ───────────────────────────────────────────────────────
   cli:
