@@ -42,6 +42,7 @@ def generate_launch_description():
     ign_resource_path = SetEnvironmentVariable(
         name='IGN_GAZEBO_RESOURCE_PATH',
         value=[
+            '/ros2_ws/worlds', ':' +
             os.path.join(pkg_tb4_ign, 'worlds'), ':' +
             os.path.join(pkg_create_ign, 'worlds'), ':' +
             str(Path(pkg_tb4_desc).parent.resolve()), ':' +

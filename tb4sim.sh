@@ -77,9 +77,10 @@ cmd_full() {
 }
 
 cmd_rviz() {
-    info "Khởi động thêm RViz2 visualizer..."
+    info "Khởi động RViz2 trên host X (Gazebo chạy ngầm trên server — KHÔNG mở gazebo_gui cùng lúc)"
+    warn "chỉ chạy RViz HOẶC Gazebo GUI, không cả hai"
     xhost +local:docker
-    dcomp --profile rviz up -d
+    dcomp --profile rviz up -d rviz
 }
 
 cmd_cli() {

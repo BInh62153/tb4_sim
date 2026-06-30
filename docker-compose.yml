@@ -22,12 +22,18 @@ x-display: &display
   NVIDIA_DRIVER_CAPABILITIES: all
   START_XVFB: "false"          # dùng host X, KHÔNG spawn Xvfb → tránh "server already running"
 
-# ── Simulator: render sensor (OAK-D) headless trên virtual display riêng ──────
+# ── Simulator: VirtualGL + Xvfb headless (GPU render; RViz tách trên host) ────
 x-sim-env: &sim-env
   DISPLAY: ":99"
-  LIBGL_ALWAYS_SOFTWARE: "1"
-  QT_QPA_PLATFORM: offscreen
-  START_XVFB: "true"          # entrypoint spawn Xvfb :99 — KHÔNG đụng host :0
+  XVFB_RESOLUTION: "1280x720x24"   # ≤720p — tiết kiệm VRAM framebuffer ảo
+  USE_VIRTUALGL: "true"            # vglrun → GPU; false = software fallback
+  VGL_DISPLAY: "${VGL_DISPLAY:-egl0}"  # egl0 trong Docker; :0 nếu host có NVIDIA X
+  VGL_PROBEGLX: "0"
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: all
+  START_XVFB: "true"
+  # KHÔNG đặt LIBGL_ALWAYS_SOFTWARE=1 khi USE_VIRTUALGL=true
+  # KHÔNG chạy rviz/gazebo_gui cùng lúc với simulator trên cùng Xvfb
 
 # ── Headless logic (slam, nav, task_manager, cli): KHÔNG cần X chút nào ───────
 x-headless-env: &headless-env
@@ -48,6 +54,7 @@ x-base: &base
     - ./maps:/ros2_ws/maps
     - ./worlds:/ros2_ws/worlds
     - ./scripts:/ros2_ws/scripts
+    - ./.cursor:/ros2_ws/.cursor
     # Fuel model cache — persist giữa các lần restart
     - fuel_cache:/root/.ignition/fuel
     # Live python code (tránh rebuild khi tweak logic nhỏ)
@@ -64,9 +71,17 @@ services:
     container_name: tb4_simulator
     profiles: ["sim", "nav", "full", "rviz"]
     environment:
-      <<: [*ros-env, *sim-env]      # FIXED: dùng sim-env (Xvfb :99) thay vì host :0
+      <<: [*ros-env, *sim-env]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu, utility, compute]
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
+      /ros2_ws/scripts/vgl_launch.sh
       ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py
       model:=lite world:=warehouse"
     healthcheck:
@@ -138,7 +153,8 @@ services:
   # ── 4. Gazebo GUI (viewer) ──────────────────────────────────────────────────
   #   Attach vào Gazebo server đang chạy trong container simulator
   #   Dùng host X server thật (DISPLAY từ host) — KHÔNG spawn Xvfb riêng
-  #   Chạy: ./tb4sim.sh rviz  (profile rviz bao gồm cả gazebo_gui)
+  #   CẢNH BÁO VRAM: KHÔNG chạy gazebo_gui + rviz cùng lúc trên server 4GB GPU.
+  #   Chạy: ./tb4sim.sh rviz  (chỉ RViz trên máy local; Gazebo ngầm trên server)
   gazebo_gui:
     <<: *base
     container_name: tb4_gazebo_gui
