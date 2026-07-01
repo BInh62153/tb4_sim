@@ -92,7 +92,15 @@ class NavigationManager:
         sy  = math.sin(yaw * 0.5)
         goal.pose.pose.orientation = Quaternion(w=cy, x=0.0, y=0.0, z=sy)
 
-        controller_id = ALGO_TO_CONTROLLER.get((algo or "").lower(), 'FollowPathDWA')
+        controller_id = ALGO_TO_CONTROLLER.get((algo or "").lower(), 'FollowPathDWA') 
+
+        # Đợi tối đa 0.5s cho ControllerSelector subscriber match, tránh mất message đầu tiên
+        if self._controller_selector_pub.get_subscription_count() == 0:
+            for _ in range(10):
+                time.sleep(0.05)
+                if self._controller_selector_pub.get_subscription_count() > 0:
+                    break
+
         self._controller_selector_pub.publish(String(data=controller_id))
 
         self._nav_start_time = time.monotonic()
