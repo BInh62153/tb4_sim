@@ -30,6 +30,13 @@ from pathlib import Path
 
 WAYPOINTS_FILE = '/ros2_ws/config/waypoints.yaml'
 
+ALGO_MAP = {
+    'dwa': 'FollowPathDWA',
+    'teb': 'FollowPathTEB',
+    'pp': 'FollowPathPP',
+    'stanley': 'FollowPathStanley',
+}
+
 
 def yaw_to_quat(yaw: float) -> Quaternion:
     cy = math.cos(yaw * 0.5)
@@ -65,11 +72,11 @@ def make_pose(wp: dict, clock) -> PoseStamped:
 
 
 class WaypointSender(Node):
-    def __init__(self, mode: str, targets: list):
+    def __init__(self, mode: str, targets: list, algo: str = 'dwa'):
         super().__init__('waypoint_sender')
         self.mode = mode
         self.targets = targets
-        self.algo = algo # Lưu lại thuật toán lựa chọn
+        self.algo = algo  # Lưu lại thuật toán lựa chọn (dwa/teb/pp/stanley)
 
         self._through_client = ActionClient(self, NavigateThroughPoses, 'navigate_through_poses')
         self._to_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
@@ -98,8 +105,7 @@ class WaypointSender(Node):
         goal = NavigateToPose.Goal()
         goal.pose = make_pose(wp, self.get_clock())
 
-        algo_map = {'dwa': 'FollowPathDWA', 'teb': 'FollowPathTEB', 'pp': 'FollowPathPP', 'stanley': 'FollowPathStanley'}
-        goal.controller_id = algo_map.get(self.algo, 'FollowPathDWA')
+        goal.controller_id = ALGO_MAP.get(self.algo, 'FollowPathDWA')
 
         future = self._to_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, future)
@@ -127,8 +133,7 @@ class WaypointSender(Node):
         goal = NavigateThroughPoses.Goal()
         goal.poses = [make_pose(self.waypoints[n], self.get_clock()) for n in valid]
 
-        algo_map = {'dwa': 'FollowPathDWA', 'teb': 'FollowPathTEB', 'pp': 'FollowPathPP', 'stanley': 'FollowPathStanley'}
-        goal.controller_id = algo_map.get(self.algo, 'FollowPathDWA')
+        goal.controller_id = ALGO_MAP.get(self.algo, 'FollowPathDWA')
 
         future = self._through_client.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, future)

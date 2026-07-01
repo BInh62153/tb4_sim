@@ -23,6 +23,16 @@ from nav2_msgs.srv import ClearEntireCostmap
 from rclpy.action import ActionClient
 
 
+#: Map tên thuật toán (nhận từ tb4_cli / send_waypoints.py) sang controller_id
+#: khai báo trong config/nav2/nav2_params.yaml (controller_plugins).
+ALGO_TO_CONTROLLER = {
+    'dwa':     'FollowPathDWA',
+    'teb':     'FollowPathTEB',
+    'pp':      'FollowPathPP',
+    'stanley': 'FollowPathStanley',
+}
+
+
 class NavigationManager:
     """Wrapper quanh Nav2 NavigateToPose action client."""
 
@@ -54,10 +64,15 @@ class NavigationManager:
         wp_data: Dict,
         on_done: Callable[[bool], None],
         goal_id: str = "",
+        algo: str = "dwa",
     ) -> bool:
         """
         Gửi NavigateToPose goal.
         on_done(success: bool) được gọi khi goal kết thúc.
+
+        algo: 'dwa' | 'teb' | 'pp' | 'stanley' — chọn controller plugin
+              (map sang controller_id qua ALGO_TO_CONTROLLER). Không hợp lệ
+              hoặc rỗng sẽ fallback về FollowPathDWA.
         """
         if not self._nav_client.server_is_ready():
             self._slog.warn("nav_server_not_ready", goal_id=goal_id)
@@ -77,9 +92,13 @@ class NavigationManager:
         sy  = math.sin(yaw * 0.5)
         goal.pose.pose.orientation = Quaternion(w=cy, x=0.0, y=0.0, z=sy)
 
+        controller_id = ALGO_TO_CONTROLLER.get((algo or "").lower(), 'FollowPathDWA')
+        goal.controller_id = controller_id
+
         self._nav_start_time = time.monotonic()
         self._slog.info("nav_goal_sent", goal_id=goal_id,
-                        x=pose.get('x'), y=pose.get('y'))
+                        x=pose.get('x'), y=pose.get('y'),
+                        algo=algo, controller_id=controller_id)
 
         fut = self._nav_client.send_goal_async(goal)
         fut.add_done_callback(

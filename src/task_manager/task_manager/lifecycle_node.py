@@ -72,6 +72,11 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._heartbeat   = None
         self._cmd_sub     = None
 
+        # Thuật toán controller hiện hành (dwa/teb/pp/stanley), do CLI chọn
+        # qua lệnh 'patrol:<algo>' hoặc 'goto:<wp>:<algo>'. Dùng cho mọi goal
+        # gửi trong _cycle() (mission tự động) lẫn goto thủ công.
+        self._current_algo = 'dwa'
+
         # ── Register event handlers ────────────────────────────────────────
         self._register_events()
 
@@ -205,6 +210,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
                 wp_name=wp_name,
             ),
             goal_id=goal_id,
+            algo=self._current_algo,
         )
         if not ok:
             self._sm.transition(SystemState.RECOVERING, "nav_send_failed")
@@ -262,8 +268,9 @@ class TurtleBot4LifecycleNode(LifecycleNode):
 
     # ── Operator command events ─────────────────────────────────────────────
 
-    def _on_cmd_patrol(self, **_):
+    def _on_cmd_patrol(self, algo: str = "dwa", **_):
         if self._sm.is_in(SystemState.IDLE, SystemState.PAUSED):
+            self._current_algo = algo
             self._sm.force_transition(SystemState.IDLE, "cmd_patrol")
             self._cycle()
 
@@ -276,11 +283,12 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._executor.cancel()
         self._sm.force_transition(SystemState.PAUSED, "cmd_stop")
 
-    def _on_cmd_goto(self, wp_name: str = "", **_):
+    def _on_cmd_goto(self, wp_name: str = "", algo: str = "dwa", **_):
         wp_data = self._planner.waypoints.get(wp_name)
         if not wp_data:
             self.get_logger().error(f"[CMD] goto: waypoint '{wp_name}' not found.")
             return
+        self._current_algo = algo
         self._nav_mgr.cancel()
         goal_id = str(uuid.uuid4())[:8]
         self._slog.goal_id  = goal_id
@@ -294,6 +302,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
                 wp_name=wp_name,
             ),
             goal_id=goal_id,
+            algo=algo,
         )
 
     def _on_cmd_resume(self, **_):
@@ -309,17 +318,43 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         text = msg.data.strip()
         self.get_logger().info(f"[CMD] Received: '{text}'")
 
-        if text == 'patrol':
-            self._sm.dispatch(Event.CMD_PATROL)
-        elif text == 'pause':
+        # tb4_cli.py gửi lệnh dạng "base[:arg1[:arg2]]", ví dụ:
+        #   "patrol:dwa"        -> base=patrol, algo=dwa
+        #   "goto:diem_A:teb"   -> base=goto,   wp_name=diem_A, algo=teb
+        #   "explore:dwa"       -> base=explore (chưa có backend, xem dưới)
+        #   "stop" / "pause" / "resume" -> không có hậu tố
+        parts = [p.strip() for p in text.split(':')]
+        base  = parts[0].lower()
+
+        if base == 'patrol':
+            algo = parts[1].lower() if len(parts) > 1 and parts[1] else 'dwa'
+            self._sm.dispatch(Event.CMD_PATROL, algo=algo)
+
+        elif base == 'pause':
             self._sm.dispatch(Event.CMD_PAUSE)
-        elif text == 'stop':
+
+        elif base == 'stop':
             self._sm.dispatch(Event.CMD_STOP)
-        elif text == 'resume':
+
+        elif base == 'resume':
             self._sm.dispatch(Event.CMD_RESUME)
-        elif text.startswith('goto:'):
-            wp_name = text.split(':', 1)[1].strip()
-            self._sm.dispatch(Event.CMD_GOTO, wp_name=wp_name)
+
+        elif base == 'goto':
+            if len(parts) < 2 or not parts[1]:
+                self.get_logger().warn(f"[CMD] goto thiếu tên waypoint: '{text}'")
+                return
+            wp_name = parts[1]
+            algo = parts[2].lower() if len(parts) > 2 and parts[2] else 'dwa'
+            self._sm.dispatch(Event.CMD_GOTO, wp_name=wp_name, algo=algo)
+
+        elif base == 'explore':
+            # TODO: chưa có CMD_EXPLORE/handler + logic frontier exploration
+            # trong task_manager (m-explore-ros2 chưa được wire vào đây).
+            # Log rõ ràng thay vì rơi vào "Unknown command" gây hiểu lầm.
+            self.get_logger().warn(
+                f"[CMD] 'explore' chưa được task_manager hỗ trợ, bỏ qua: '{text}'"
+            )
+
         else:
             self.get_logger().warn(f"[CMD] Unknown command: '{text}'")
 
