@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-managers/mission_planner.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MissionPlanner: load YAML config, quản lý patrol sequence.
 

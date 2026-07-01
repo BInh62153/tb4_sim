@@ -45,6 +45,7 @@ class Event(Enum):
     CMD_STOP            = auto()
     CMD_GOTO            = auto()
     CMD_RESUME          = auto()
+    CMD_EXPLORE         = auto()
 
 
 class StateMachine:

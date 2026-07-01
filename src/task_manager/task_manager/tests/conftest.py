@@ -110,6 +110,51 @@ def _install_ros_stubs() -> None:
 
     nav2_srv.ClearEntireCostmap = ClearEntireCostmap
 
+    # ── Stubs cho ExploreManager (std_msgs.msg.Bool + rcl_interfaces) ───────
+    std_msg = _mod('std_msgs.msg')
+
+    class Bool:
+        def __init__(self):
+            self.data = False
+
+    std_msg.Bool = Bool
+
+    rcl_iface_msg = _mod('rcl_interfaces.msg')
+
+    class ParameterType:
+        PARAMETER_NOT_SET = 0
+        PARAMETER_BOOL = 1
+        PARAMETER_INTEGER = 2
+        PARAMETER_DOUBLE = 3
+        PARAMETER_STRING = 4
+
+    class ParameterValue:
+        def __init__(self, **kw):
+            for k, v in kw.items():
+                setattr(self, k, v)
+
+    class Parameter:
+        def __init__(self):
+            self.name = ''
+            self.value = None
+
+    rcl_iface_msg.ParameterType = ParameterType
+    rcl_iface_msg.ParameterValue = ParameterValue
+    rcl_iface_msg.Parameter = Parameter
+
+    rcl_iface_srv = _mod('rcl_interfaces.srv')
+
+    class SetParameters:
+        class Request:
+            def __init__(self):
+                self.parameters = []
+
+        class Response:
+            def __init__(self):
+                self.results = []
+
+    rcl_iface_srv.SetParameters = SetParameters
+
 
 _install_ros_stubs()
 

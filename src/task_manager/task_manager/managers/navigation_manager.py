@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-managers/navigation_manager.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NavigationManager: gửi Nav2 goals, clear costmap, track goal handle.
 

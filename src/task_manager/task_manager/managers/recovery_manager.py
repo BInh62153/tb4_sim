@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-managers/recovery_manager.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RecoveryManager: Nav2-standard 6-level recovery tree.
 

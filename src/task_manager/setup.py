@@ -7,8 +7,11 @@ package_name = 'task_manager'
 # Tính đường dẫn tuyệt đối đến thư mục config từ vị trí của setup.py,
 # tránh phụ thuộc vào cwd của colcon (colcon không chạy từ src/task_manager/).
 _HERE = os.path.dirname(os.path.abspath(__file__))
-_CONFIG_DIR = os.path.join(_HERE, '..', '..', 'config')
-_config_yamls = glob(os.path.join(_CONFIG_DIR, '*.yaml'))
+_CONFIG_DIR_ABS = os.path.join(_HERE, '..', '..', 'config')
+_config_yamls = [
+    os.path.relpath(p, _HERE)
+    for p in glob(os.path.join(_CONFIG_DIR_ABS, '*.yaml'))
+]
 
 setup(
     name=package_name,

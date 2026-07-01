@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-managers/task_executor.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 TaskExecutor: chạy task sequence tại waypoint (wait, rotate, log, scan…).
 

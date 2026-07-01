@@ -33,6 +33,7 @@ from .managers.recovery_manager   import RecoveryManager
 from .managers.battery_manager    import BatteryManager
 from .managers.dock_manager       import DockManager
 from .managers.task_executor      import TaskExecutor
+from .managers.explore_manager    import ExploreManager
 
 
 class TurtleBot4LifecycleNode(LifecycleNode):
@@ -66,6 +67,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._battery   = BatteryManager(self, self._slog)
         self._dock_mgr  = DockManager(self, self._nav_mgr, self._battery, self._slog)
         self._executor  = TaskExecutor(self, self._spin_client, self._slog)
+        self._explore_mgr = ExploreManager(self, self._slog)
 
         # ── ROS interfaces ──────────────────────────────────────────────────
         self._status_pub  = self.create_lifecycle_publisher(String, '/tb4/status', 10)
@@ -76,6 +78,10 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         # qua lệnh 'patrol:<algo>' hoặc 'goto:<wp>:<algo>'. Dùng cho mọi goal
         # gửi trong _cycle() (mission tự động) lẫn goto thủ công.
         self._current_algo = 'dwa'
+
+        # 'mission' | 'explore' | None — nhớ lệnh 'pause' vừa dừng luồng nào,
+        # để 'resume' biết nên tiếp tục mission cycle hay explore.
+        self._paused_from = None
 
         # ── Register event handlers ────────────────────────────────────────
         self._register_events()
@@ -99,6 +105,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         sm.register(Event.CMD_STOP,           self._on_cmd_stop)
         sm.register(Event.CMD_GOTO,           self._on_cmd_goto)
         sm.register(Event.CMD_RESUME,         self._on_cmd_resume)
+        sm.register(Event.CMD_EXPLORE,        self._on_cmd_explore)
 
     # ═══════════════════════════════════════════════════════════════════════
     #  Lifecycle callbacks ///////////////////
@@ -149,6 +156,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._nav_mgr.cancel()
         self._executor.cancel()
         self._dock_mgr.cancel()
+        self._explore_mgr.stop()
         if self._cmd_sub:
             self.destroy_subscription(self._cmd_sub)
             self._cmd_sub = None
@@ -248,9 +256,10 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._cycle()
 
     def _on_battery_low(self, **_):
-        if self._sm.is_in(SystemState.NAVIGATING, SystemState.EXECUTING_TASK):
+        if self._sm.is_in(SystemState.NAVIGATING, SystemState.EXECUTING_TASK, SystemState.EXPLORING):
             self._nav_mgr.cancel()
             self._executor.cancel()
+            self._explore_mgr.stop()
             self._sm.transition(SystemState.LOW_BATTERY_DOCKING, "battery_low_interrupt")
             self._do_dock()
 
@@ -258,6 +267,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self.get_logger().error("[Battery] CRITICAL — hard interrupt!")
         self._nav_mgr.cancel()
         self._executor.cancel()
+        self._explore_mgr.stop()
         self._sm.force_transition(SystemState.LOW_BATTERY_DOCKING, "battery_critical")
         self._do_dock()
 
@@ -269,18 +279,26 @@ class TurtleBot4LifecycleNode(LifecycleNode):
     # ── Operator command events ─────────────────────────────────────────────
 
     def _on_cmd_patrol(self, algo: str = "dwa", **_):
-        if self._sm.is_in(SystemState.IDLE, SystemState.PAUSED):
+        if self._sm.is_in(SystemState.IDLE, SystemState.PAUSED, SystemState.EXPLORING):
+            self._explore_mgr.stop()
             self._current_algo = algo
             self._sm.force_transition(SystemState.IDLE, "cmd_patrol")
             self._cycle()
 
     def _on_cmd_pause(self, **_):
+        if self._sm.is_in(SystemState.EXPLORING):
+            self._explore_mgr.pause()
+            self._paused_from = 'explore'
+        else:
+            self._paused_from = 'mission'
         self._nav_mgr.cancel()
         self._sm.force_transition(SystemState.PAUSED, "cmd_pause")
 
     def _on_cmd_stop(self, **_):
         self._nav_mgr.cancel()
         self._executor.cancel()
+        self._explore_mgr.stop()
+        self._paused_from = None
         self._sm.force_transition(SystemState.PAUSED, "cmd_stop")
 
     def _on_cmd_goto(self, wp_name: str = "", algo: str = "dwa", **_):
@@ -288,6 +306,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         if not wp_data:
             self.get_logger().error(f"[CMD] goto: waypoint '{wp_name}' not found.")
             return
+        self._explore_mgr.stop()
         self._current_algo = algo
         self._nav_mgr.cancel()
         goal_id = str(uuid.uuid4())[:8]
@@ -306,9 +325,29 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         )
 
     def _on_cmd_resume(self, **_):
-        if self._sm.is_in(SystemState.PAUSED):
+        if not self._sm.is_in(SystemState.PAUSED):
+            return
+        if self._paused_from == 'explore':
+            self._sm.force_transition(SystemState.EXPLORING, "cmd_resume_explore")
+            self._explore_mgr.start(self._current_algo)
+        else:
             self._sm.force_transition(SystemState.IDLE, "cmd_resume")
             self._cycle()
+        self._paused_from = None
+
+    def _on_cmd_explore(self, algo: str = "dwa", **_):
+        if self._sm.is_in(SystemState.IDLE, SystemState.PAUSED):
+            self._current_algo = algo
+            self._sm.force_transition(SystemState.EXPLORING, "cmd_explore")
+            self._explore_mgr.start(algo)
+        elif self._sm.is_in(SystemState.EXPLORING):
+            # Đang explore rồi -> chỉ đổi thuật toán, không restart tiến trình.
+            self._current_algo = algo
+            self._explore_mgr.set_algo(algo)
+        else:
+            self.get_logger().warn(
+                f"[CMD] explore: bỏ qua vì đang ở state {self._sm.state.name}"
+            )
 
     # ═══════════════════════════════════════════════════════════════════════
     #  Operator command subscription
@@ -348,12 +387,8 @@ class TurtleBot4LifecycleNode(LifecycleNode):
             self._sm.dispatch(Event.CMD_GOTO, wp_name=wp_name, algo=algo)
 
         elif base == 'explore':
-            # TODO: chưa có CMD_EXPLORE/handler + logic frontier exploration
-            # trong task_manager (m-explore-ros2 chưa được wire vào đây).
-            # Log rõ ràng thay vì rơi vào "Unknown command" gây hiểu lầm.
-            self.get_logger().warn(
-                f"[CMD] 'explore' chưa được task_manager hỗ trợ, bỏ qua: '{text}'"
-            )
+            algo = parts[1].lower() if len(parts) > 1 and parts[1] else 'dwa'
+            self._sm.dispatch(Event.CMD_EXPLORE, algo=algo)
 
         else:
             self.get_logger().warn(f"[CMD] Unknown command: '{text}'")

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """
-managers/dock_manager.py
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DockManager: navigate to dock, wait for charge, resume mission.
 
