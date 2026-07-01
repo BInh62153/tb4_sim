@@ -20,7 +20,7 @@ from geometry_msgs.msg import PoseStamped, Quaternion
 from nav2_msgs.action import NavigateToPose
 from nav2_msgs.srv import ClearEntireCostmap
 from rclpy.action import ActionClient
-
+from std_msgs.msg import String
 
 #: Map tên thuật toán (nhận từ tb4_cli / send_waypoints.py) sang controller_id
 #: khai báo trong config/nav2/nav2_params.yaml (controller_plugins).
@@ -50,6 +50,7 @@ class NavigationManager:
         )
         self._current_goal_handle = None
         self._nav_start_time: Optional[float] = None
+        self._controller_selector_pub = node.create_publisher(String, '/controller_selector', 10)
 
     # ── Server readiness ───────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ class NavigationManager:
         goal.pose.pose.orientation = Quaternion(w=cy, x=0.0, y=0.0, z=sy)
 
         controller_id = ALGO_TO_CONTROLLER.get((algo or "").lower(), 'FollowPathDWA')
-        goal.controller_id = controller_id
+        self._controller_selector_pub.publish(String(data=controller_id))
 
         self._nav_start_time = time.monotonic()
         self._slog.info("nav_goal_sent", goal_id=goal_id,

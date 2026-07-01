@@ -199,7 +199,7 @@ services:
       <<: [*ros-env, *headless-env]   # FIXED: headless logic — service từng crash X server
     depends_on:
       navigation:
-        condition: service_started
+        condition: service_healthy
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       source /ros2_ws/install/setup.bash &&
