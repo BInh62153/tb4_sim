@@ -42,7 +42,7 @@ ALGO_TO_CONTROLLER = {
     'dwa':     'FollowPathDWA',
     'teb':     'FollowPathTEB',
     'pp':      'FollowPathPP',
-    'stanley': 'FollowPathStanley',
+    # 'stanley': 'FollowPathStanley',  # chưa implement — xem TODO trong nav2_params.yaml
 }
 
 EXPLORE_NODE_NAME = 'explore_node'  # đặt trong explore.launch.py (name="explore_node")

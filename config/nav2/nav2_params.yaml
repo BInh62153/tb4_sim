@@ -116,7 +116,7 @@ controller_server:
     failure_tolerance: 0.3
     progress_checker_plugins: ["progress_checker"]
     goal_checker_plugins: ["precise_goal_checker"]
-    controller_plugins: ["FollowPathDWA", "FollowPathTEB", "FollowPathPP", "FollowPathStanley"]
+    controller_plugins: ["FollowPathDWA", "FollowPathTEB", "FollowPathPP"]  # TODO: thêm lại "FollowPathStanley" khi nav2_stanley_controller đã build xong
 
 
     progress_checker:
