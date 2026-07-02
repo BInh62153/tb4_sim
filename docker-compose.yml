@@ -9,7 +9,7 @@
 #    USE_VIRTUALGL=true         # mặc định false (CPU/Xvfb) — thử lại GPU path
 #    RENDER_ENGINE=ogre2        # mặc định "ogre" (nhẹ hơn cho CPU render)
 #    XVFB_RESOLUTION=1280x720x24
-#    SIM_CPU_LIMIT / SLAM_CPU_LIMIT / NAV_CPU_LIMIT   # số CPU core tối đa (mặc định 4/2/3)
+#    SIM_CPU_LIMIT / SLAM_CPU_LIMIT / NAV_CPU_LIMIT   # số CPU core tối đa (mặc định 12/3/4 — chỉnh theo `nproc` máy bạn)
 #  Lưu ý: deploy.resources.limits cần Docker Compose v2 (docker compose, không phải
 #  docker-compose v1) để áp dụng khi chạy ngoài Swarm mode — `docker compose version`
 #  để kiểm tra.
@@ -102,10 +102,12 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu, utility, compute]
-        # PERF: Gazebo là service nặng nhất — dành ưu tiên CPU rõ ràng cho nó
-        # thay vì để mọi container tranh chấp CPU ngang hàng qua cgroup mặc định.
+        # PERF: máy 20 core → cấp hẳn 12 core cho Gazebo (service nặng nhất), vẫn
+        # chừa 8 core cho SLAM/Nav2/host-OS/Hyprland. 383%/400% CPU (đo bằng
+        # `docker stats`) ở giới hạn 4 core cũ chính là nguyên nhân robot phản
+        # ứng cmd_vel trễ — Gazebo bị cap CPU nên real_time_factor tụt.
         limits:
-          cpus: "${SIM_CPU_LIMIT:-4}"
+          cpus: "${SIM_CPU_LIMIT:-12}"
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       /ros2_ws/scripts/vgl_launch.sh
@@ -143,7 +145,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${SLAM_CPU_LIMIT:-2}"
+          cpus: "${SLAM_CPU_LIMIT:-3}"
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       sleep 30 &&
@@ -173,7 +175,7 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${NAV_CPU_LIMIT:-3}"
+          cpus: "${NAV_CPU_LIMIT:-4}"
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       sleep 10 &&
