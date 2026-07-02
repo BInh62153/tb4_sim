@@ -1,0 +1,174 @@
+FROM osrf/ros:humble-desktop-full
+
+LABEL maintainer="tb4-sim"
+LABEL description="TurtleBot4 Simulation - ROS2 Humble + Nav2 + SLAM + Ignition Gazebo Fortress"
+
+
+# Environment
+ENV DEBIAN_FRONTEND=noninteractive \
+    ROS_DISTRO=humble \
+    LANG=en_US.UTF-8 \
+    LANGUAGE=en_US:en \
+    LC_ALL=en_US.UTF-8 \
+    ROS_DOMAIN_ID=0 \
+    TURTLEBOT4_MODEL=standard \
+    DISPLAY=:0 \
+    QT_X11_NO_MITSHM=1
+
+SHELL ["/bin/bash", "-c"]
+
+WORKDIR /ros2_ws
+
+# System Dependencies & OS Upgrade (Vá lỗ hổng bảo mật)
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    locales \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    nano \
+    tmux \
+    htop \
+    xterm \
+    xvfb \
+    mesa-utils \
+    ros-humble-libg2o \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-vcstool \
+    && locale-gen en_US.UTF-8 \
+    && update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 \
+    && rm -rf /var/lib/apt/lists/*
+
+# VirtualGL — GPU-accelerated OpenGL inside Xvfb (headless server)
+ARG VIRTUALGL_VERSION=3.1.1
+RUN curl -fsSL -o /tmp/virtualgl.deb \
+        "https://github.com/VirtualGL/virtualgl/releases/download/${VIRTUALGL_VERSION}/virtualgl_${VIRTUALGL_VERSION}_amd64.deb" \
+    && apt-get update \
+    && dpkg -i /tmp/virtualgl.deb || apt-get install -f -y \
+    && rm -f /tmp/virtualgl.deb \
+    && rm -rf /var/lib/apt/lists/* \
+    && vglrun --version || true
+
+# ROS Packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+\
+# TurtleBot4
+    ros-humble-turtlebot4-simulator \
+    ros-humble-turtlebot4-description \
+    ros-humble-turtlebot4-navigation \
+    ros-humble-turtlebot4-msgs \
+    ros-humble-turtlebot4-node \
+    ros-humble-turtlebot4-viz \
+    ros-humble-turtlebot4-ignition-bringup \
+    ros-humble-turtlebot4-ignition-gui-plugins \
+    ros-humble-turtlebot4-ignition-toolbox \
+\
+# Navigation2
+    ros-humble-nav2-bringup \
+    ros-humble-nav2-bt-navigator \
+    ros-humble-nav2-controller \
+    ros-humble-nav2-planner \
+    ros-humble-nav2-waypoint-follower \
+    ros-humble-nav2-lifecycle-manager \
+    ros-humble-nav2-costmap-2d \
+    ros-humble-nav2-map-server \
+    ros-humble-nav2-amcl \
+    ros-humble-nav2-smac-planner \
+    ros-humble-nav2-mppi-controller \
+    ros-humble-nav2-velocity-smoother \
+    ros-humble-nav2-behaviors \
+    ros-humble-nav2-core \
+    #ros-humble-teb-local-planner \
+\
+# SLAM
+    ros-humble-slam-toolbox \
+    #ros-humble-explore-lite \
+\
+# ros2_control
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-controller-manager \
+    ros-humble-diff-drive-controller \
+    ros-humble-joint-state-broadcaster \
+    ros-humble-ros2controlcli \
+\
+# TF / Robot
+    ros-humble-tf2-tools \
+    ros-humble-tf2-ros \
+    ros-humble-robot-state-publisher \
+    ros-humble-joint-state-publisher \
+\
+# Visualization
+    ros-humble-rviz2 \
+\
+# DDS
+    ros-humble-rmw-cyclonedds-cpp \
+\
+# Gazebo Fortress
+    ros-humble-ros-gz \
+    ros-humble-ros-gz-bridge \
+    ros-humble-ros-gz-interfaces \
+    ros-humble-ros-gz-sim \
+\
+# === BỔ SUNG CÁC GÓI DƯỚI ĐÂY ĐỂ BIÊN DỊCH TEB & M-EXPLORE TỪ SOURCE ===
+    ros-humble-rosidl-default-generators \
+    ros-humble-rosidl-default-runtime \
+    ros-humble-cv-bridge \
+    ros-humble-vision-opencv \
+    ros-humble-dwb-critics \
+    ros-humble-nav-2d-utils \
+    libsuitesparse-dev \
+    libboost-all-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python Packages
+RUN pip3 install --no-cache-dir \
+    numpy \
+    scipy \
+    pyyaml \
+    transforms3d \
+    rich \
+    typer
+
+# Workspace
+RUN mkdir -p /ros2_ws/src
+
+COPY src/ /ros2_ws/src/
+
+# rosdep (Sắp xếp lại thứ tự tối ưu)
+RUN apt-get update && \
+    rosdep update && \
+    rosdep install \
+        --from-paths src \
+        --ignore-src \
+        --rosdistro humble \
+        -r \
+        -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# Build workspace packages (costmap_converter → teb → explore → task_manager)
+RUN source /opt/ros/humble/setup.bash && \
+    colcon build \
+        --symlink-install \
+        --event-handlers console_direct+ \
+        --packages-up-to teb_local_planner explore_lite task_manager \
+        --cmake-args -DCMAKE_CXX_STANDARD=17
+
+# Bash
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "source /ros2_ws/install/setup.bash" >> /root/.bashrc && \
+    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc
+# Entrypoint
+
+COPY docker/entrypoint.sh /entrypoint.sh
+
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+CMD ["bash"]
