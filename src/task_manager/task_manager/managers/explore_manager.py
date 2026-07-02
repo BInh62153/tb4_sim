@@ -6,19 +6,25 @@ và đồng bộ lựa chọn thuật toán (algo) với controller_id của nó
 NavigationManager làm cho goto/patrol.
 
 explore_lite là 1 node C++ độc lập (không chạy trong tiến trình Python của
-task_manager), nên được quản lý theo 3 cơ chế:
+task_manager), nhưng nó gửi goal tới BT Navigator qua action `navigate_to_pose`
+giống hệt NavigationManager — nghĩa là node `ControllerSelector` trong
+navigate_to_pose.xml/navigate_through_poses.xml (đọc từ topic
+`/controller_selector`) áp dụng cho MỌI client gửi goal, không riêng gì
+NavigationManager. Vì vậy không cần patch C++ / thêm parameter tùy biến trên
+explore_node — chỉ cần publish cùng topic `/controller_selector` trước khi
+explore_lite gửi goal tiếp theo là đủ.
 
   • start/stop tiến trình  → spawn/kill qua `ros2 launch explore_lite
     explore.launch.py` (subprocess).
   • pause/resume tìm frontier (không kill tiến trình) → publish
     std_msgs/Bool lên topic `/explore/resume` (đã có sẵn trong explore.cpp,
     xem Explore::resumeCallback — không cần sửa).
-  • chọn thuật toán lái (dwa/teb/pp/stanley) → set parameter `controller_id`
-    trên node `explore_node` qua service `/explore_node/set_parameters`.
-    (yêu cầu patch nhỏ trong src/m-explore-ros2/explore/src/explore.cpp +
-    include/explore/explore.h để node đọc parameter này khi gửi goal —
-    xem PATCH đi kèm. Nếu chưa patch, explore vẫn chạy được, chỉ luôn dùng
-    FollowPathDWA mặc định.)
+  • chọn thuật toán lái (dwa/teb/pp/stanley) → publish std_msgs/String lên
+    topic `/controller_selector` (BT ControllerSelector đọc, set blackboard
+    `selected_controller`, FollowPath node dùng giá trị đó) — CÙNG cơ chế
+    NavigationManager đang dùng, không phải service set_parameters (node
+    explore_node không hề khai báo parameter `controller_id`, gọi sẽ luôn
+    bị reject).
 
 Inject:
     node  – ROS2 LifecycleNode (để tạo publisher/service client)
@@ -30,9 +36,18 @@ from __future__ import annotations
 import subprocess
 from typing import Optional
 
-from std_msgs.msg import Bool
-from rcl_interfaces.srv import SetParameters
-from rcl_interfaces.msg import Parameter, ParameterValue, ParameterType
+from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from std_msgs.msg import Bool, String
+
+#: QoS "latched" — xem giải thích chi tiết trong navigation_manager.py.
+#: Dùng chung định nghĩa để publisher /controller_selector nhất quán dù được
+#: tạo từ NavigationManager hay ExploreManager.
+_SELECTOR_QOS = QoSProfile(
+    depth=1,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    history=QoSHistoryPolicy.KEEP_LAST,
+)
 
 
 #: Map tên thuật toán sang controller_id (giống ALGO_TO_CONTROLLER trong
@@ -45,13 +60,9 @@ ALGO_TO_CONTROLLER = {
     # 'stanley': 'FollowPathStanley',  # chưa implement — xem TODO trong nav2_params.yaml
 }
 
-EXPLORE_NODE_NAME = 'explore_node'  # đặt trong explore.launch.py (name="explore_node")
-
 
 class ExploreManager:
     """Điều phối vòng đời + thuật toán của node explore_lite."""
-
-    SET_PARAM_TIMEOUT_S = 3.0
 
     def __init__(self, node, slog):
         self._node = node
@@ -62,8 +73,8 @@ class ExploreManager:
         self._current_algo = 'dwa'
 
         self._resume_pub = node.create_publisher(Bool, '/explore/resume', 10)
-        self._set_param_client = node.create_client(
-            SetParameters, f'/{EXPLORE_NODE_NAME}/set_parameters'
+        self._controller_selector_pub = node.create_publisher(
+            String, '/controller_selector', _SELECTOR_QOS
         )
 
     # ── Public API ──────────────────────────────────────────────────────────
@@ -139,37 +150,7 @@ class ExploreManager:
     def _set_controller_id(self, algo: str):
         controller_id = ALGO_TO_CONTROLLER.get(algo, 'FollowPathDWA')
 
-        if not self._set_param_client.wait_for_service(timeout_sec=self.SET_PARAM_TIMEOUT_S):
-            self._slog.warn(
-                "explore_set_param_unavailable",
-                note="explore_node chưa sẵn sàng — sẽ dùng controller_id mặc định (FollowPathDWA) "
-                     "cho tới lần đổi thuật toán kế tiếp",
-            )
-            return
-
-        req = SetParameters.Request()
-        param = Parameter()
-        param.name = 'controller_id'
-        param.value = ParameterValue(
-            type=ParameterType.PARAMETER_STRING,
-            string_value=controller_id,
-        )
-        req.parameters = [param]
-
-        fut = self._set_param_client.call_async(req)
-        fut.add_done_callback(
-            lambda f: self._on_set_param_done(f, controller_id)
-        )
-
-    def _on_set_param_done(self, future, controller_id: str):
-        try:
-            result = future.result()
-            ok = bool(result.results) and result.results[0].successful
-        except Exception as exc:
-            self._slog.warn("explore_set_param_failed", error=str(exc))
-            return
-        if ok:
-            self._slog.info("explore_controller_id_set", controller_id=controller_id)
-        else:
-            reason = result.results[0].reason if result.results else "unknown"
-            self._slog.warn("explore_set_param_rejected", controller_id=controller_id, reason=reason)
+        # FIXED: QoS TRANSIENT_LOCAL (latched) thay cho vòng lặp time.sleep()
+        # chờ subscriber — xem giải thích trong NavigationManager.send_goal().
+        self._controller_selector_pub.publish(String(data=controller_id))
+        self._slog.info("explore_controller_id_set", controller_id=controller_id)

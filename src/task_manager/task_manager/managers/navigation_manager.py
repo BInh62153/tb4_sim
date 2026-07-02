@@ -20,7 +20,18 @@ from geometry_msgs.msg import PoseStamped, Quaternion
 from nav2_msgs.action import NavigateToPose
 from nav2_msgs.srv import ClearEntireCostmap
 from rclpy.action import ActionClient
+from rclpy.qos import QoSDurabilityPolicy, QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import String
+
+#: QoS "latched": publisher giữ lại message cuối cùng, subscriber join trễ
+#: (vd ControllerSelector BT node được nav2 tạo lại mỗi goal) vẫn nhận được
+#: ngay lập tức — không cần vòng lặp chờ get_subscription_count() nữa.
+_SELECTOR_QOS = QoSProfile(
+    depth=1,
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+    history=QoSHistoryPolicy.KEEP_LAST,
+)
 
 #: Map tên thuật toán (nhận từ tb4_cli / send_waypoints.py) sang controller_id
 #: khai báo trong config/nav2/nav2_params.yaml (controller_plugins).
@@ -50,7 +61,9 @@ class NavigationManager:
         )
         self._current_goal_handle = None
         self._nav_start_time: Optional[float] = None
-        self._controller_selector_pub = node.create_publisher(String, '/controller_selector', 10)
+        self._controller_selector_pub = node.create_publisher(
+            String, '/controller_selector', _SELECTOR_QOS
+        )
 
     # ── Server readiness ───────────────────────────────────────────────────
 
@@ -92,15 +105,15 @@ class NavigationManager:
         sy  = math.sin(yaw * 0.5)
         goal.pose.pose.orientation = Quaternion(w=cy, x=0.0, y=0.0, z=sy)
 
-        controller_id = ALGO_TO_CONTROLLER.get((algo or "").lower(), 'FollowPathDWA') 
+        controller_id = ALGO_TO_CONTROLLER.get((algo or "").lower(), 'FollowPathDWA')
 
-        # Đợi tối đa 0.5s cho ControllerSelector subscriber match, tránh mất message đầu tiên
-        if self._controller_selector_pub.get_subscription_count() == 0:
-            for _ in range(10):
-                time.sleep(0.05)
-                if self._controller_selector_pub.get_subscription_count() > 0:
-                    break
-
+        # FIXED: publisher dùng QoS TRANSIENT_LOCAL (latched) nên không cần
+        # chờ get_subscription_count() nữa — subscriber (ControllerSelector BT
+        # node, được nav2 tạo lại mỗi goal) join trễ vẫn nhận được message cuối
+        # ngay lập tức. Trước đây vòng lặp time.sleep() ở đây block TOÀN BỘ
+        # single-threaded executor của node (không nhận lệnh CLI, không xử lý
+        # callback nav2/heartbeat) tới 0.5s MỖI LẦN gửi goal — chính là nguyên
+        # nhân patrol/goto "phản ứng trễ" và CLI "gõ lệnh phải chờ lâu".
         self._controller_selector_pub.publish(String(data=controller_id))
 
         self._nav_start_time = time.monotonic()

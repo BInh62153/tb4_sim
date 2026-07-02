@@ -1,7 +1,12 @@
 """
 test_explore_manager.py — Unit tests for ExploreManager.
-Mocks subprocess.Popen + ROS publisher/service client, không cần ros2/colcon
+Mocks subprocess.Popen + ROS publishers, không cần ros2/colcon
 hay tiến trình explore_lite thật.
+
+Cơ chế chọn controller: publish std_msgs/String lên topic
+`/controller_selector` (cùng cơ chế NavigationManager dùng cho goto/patrol) —
+KHÔNG còn dùng service `set_parameters` (đã bị xoá vì explore_node không hề
+khai báo parameter `controller_id`, luôn bị reject).
 """
 
 import pytest
@@ -30,16 +35,17 @@ def make_running_proc():
 def make_explore_mgr():
     node = MagicMock()
     resume_pub = MagicMock()
-    set_param_client = MagicMock()
-    set_param_client.wait_for_service.return_value = True
-    set_param_client.call_async.return_value = MagicMock()
+    controller_pub = MagicMock()
+    # Subscriber "đã sẵn sàng" ngay từ đầu -> tránh vòng chờ 0.5s trong test
+    controller_pub.get_subscription_count.return_value = 1
 
-    node.create_publisher.return_value = resume_pub
-    node.create_client.return_value = set_param_client
+    # ExploreManager tạo 2 publisher: /explore/resume rồi /controller_selector
+    # (đúng thứ tự khai báo trong __init__) -> map theo thứ tự gọi.
+    node.create_publisher.side_effect = [resume_pub, controller_pub]
 
     slog = FakeLogger()
     em = ExploreManager(node, slog)
-    return em, node, resume_pub, set_param_client
+    return em, node, resume_pub, controller_pub
 
 
 class TestIsRunning:
@@ -93,22 +99,22 @@ class TestStart:
         assert em.is_exploring is True
         assert em._current_algo == 'pp'
 
-    def test_start_requests_controller_id_via_set_parameters(self):
-        em, _, _, set_param_client = make_explore_mgr()
+    def test_start_publishes_controller_id_via_controller_selector_topic(self):
+        em, _, _, controller_pub = make_explore_mgr()
         em._proc = make_running_proc()
         em.start('teb')
-        set_param_client.wait_for_service.assert_called_once()
-        set_param_client.call_async.assert_called_once()
-        req = set_param_client.call_async.call_args[0][0]
-        assert req.parameters[0].name == 'controller_id'
-        assert req.parameters[0].value.string_value == ALGO_TO_CONTROLLER['teb']
+        controller_pub.publish.assert_called_once()
+        published_msg = controller_pub.publish.call_args[0][0]
+        assert published_msg.data == ALGO_TO_CONTROLLER['teb']
 
-    def test_start_skips_set_param_when_service_unavailable(self):
-        em, _, _, set_param_client = make_explore_mgr()
-        set_param_client.wait_for_service.return_value = False
+    def test_start_waits_for_subscriber_before_publishing(self):
+        em, _, _, controller_pub = make_explore_mgr()
+        # Chưa có subscriber lúc đầu, xuất hiện sau vài lần poll
+        controller_pub.get_subscription_count.side_effect = [0, 0, 1]
         em._proc = make_running_proc()
-        em.start('teb')
-        set_param_client.call_async.assert_not_called()
+        with patch('task_manager.managers.explore_manager.time.sleep'):
+            em.start('dwa')
+        controller_pub.publish.assert_called_once()
 
 
 class TestPause:
@@ -155,37 +161,17 @@ class TestStop:
 
 class TestSetAlgo:
     def test_set_algo_updates_controller_when_running(self):
-        em, _, _, set_param_client = make_explore_mgr()
+        em, _, _, controller_pub = make_explore_mgr()
         em._proc = make_running_proc()
         em.set_algo('stanley')
-        set_param_client.call_async.assert_called_once()
+        controller_pub.publish.assert_called_once()
+        published_msg = controller_pub.publish.call_args[0][0]
+        # 'stanley' chưa có trong ALGO_TO_CONTROLLER -> fallback FollowPathDWA
+        assert published_msg.data == 'FollowPathDWA'
         assert em._current_algo == 'stanley'
 
-    def test_set_algo_skips_param_call_when_not_running(self):
-        em, _, _, set_param_client = make_explore_mgr()
-        em.set_algo('stanley')
-        set_param_client.call_async.assert_not_called()
-        assert em._current_algo == 'stanley'  # vẫn nhớ lựa chọn cho lần start() sau
-
-
-class TestOnSetParamDone:
-    def test_logs_success_when_result_successful(self):
-        em, *_ = make_explore_mgr()
-        future = MagicMock()
-        result_item = MagicMock(successful=True)
-        future.result.return_value = MagicMock(results=[result_item])
-        # Không raise là đủ để coi là pass (FakeLogger không assert nội dung)
-        em._on_set_param_done(future, 'FollowPathTEB')
-
-    def test_logs_warning_when_result_rejected(self):
-        em, *_ = make_explore_mgr()
-        future = MagicMock()
-        result_item = MagicMock(successful=False, reason='invalid value')
-        future.result.return_value = MagicMock(results=[result_item])
-        em._on_set_param_done(future, 'FollowPathTEB')
-
-    def test_handles_exception_from_future(self):
-        em, *_ = make_explore_mgr()
-        future = MagicMock()
-        future.result.side_effect = Exception("service call failed")
-        em._on_set_param_done(future, 'FollowPathTEB')  # không được raise
+    def test_set_algo_skips_publish_when_not_running(self):
+        em, _, _, controller_pub = make_explore_mgr()
+        em.set_algo('teb')
+        controller_pub.publish.assert_not_called()
+        assert em._current_algo == 'teb'  # vẫn nhớ lựa chọn cho lần start() sau

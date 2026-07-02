@@ -77,7 +77,7 @@ x-base: &base
     - ./maps:/ros2_ws/maps
     - ./worlds:/ros2_ws/worlds
     - ./scripts:/ros2_ws/scripts
-    - ./.cursor:/ros2_ws/.cursor
+    - ./.logs:/ros2_ws/.logs
     # Fuel model cache — persist giữa các lần restart
     - fuel_cache:/root/.ignition/fuel
     # Live python code (tránh rebuild khi tweak logic nhỏ)
@@ -119,10 +119,17 @@ services:
       #      trước khi cho phép slam/nav start — tránh costmap build từ scan rỗng
       #      lúc world model còn đang spawn (lý do gây "Nav2 nhảy vào trước khi
       #      Gazebo load xong map warehouse")
+      # FIXED: "ros2 topic echo /tf --once | grep -q odom" bắt 1 message /tf
+      #        NGẪU NHIÊN trong dòng chảy chung của mọi publisher (robot_state_publisher
+      #        phát hàng chục joint tĩnh không liên quan tới "odom", SLAM phát map→odom,
+      #        diffdrive_controller phát odom→base_link...) — xác suất trúng message
+      #        chứa "odom" rất thấp, khiến check fail gần như luôn dù TF tree healthy
+      #        thật sự. Thay bằng tf2_echo: chủ động lookup đúng transform odom→base_link
+      #        (định nghĩa "sẵn sàng" đúng như comment gốc), không phụ thuộc may rủi.
       test: ["CMD", "/bin/bash", "-c",
              "source /opt/ros/humble/setup.bash &&
              ros2 topic list 2>/dev/null | grep -q /scan &&
-             timeout 5 ros2 topic echo /tf --once 2>/dev/null | grep -q odom &&
+             timeout 6 ros2 run tf2_ros tf2_echo odom base_link 2>/dev/null | grep -q Translation &&
              CLOCK_SEC=$$(timeout 5 ros2 topic echo /clock --once 2>/dev/null | grep -E '^ *sec:' | head -1 | awk '{print $$2}') &&
              [ \"$${CLOCK_SEC:-0}\" -ge 5 ] &&
              SCAN_RANGES=$$(timeout 5 ros2 topic echo /scan --once 2>/dev/null | awk '/^ranges:/{f=1;next}/^intensities:/{f=0}f' | grep -c '^- ') &&
@@ -222,10 +229,17 @@ services:
     depends_on:
       simulator:
         condition: service_healthy
+    # Dùng config/rviz/tb4_view.rviz (đã có sẵn Image display cho OAK-D preview
+    # stream, LaserScan, Map, costmaps...) thay vì default robot.rviz của gói
+    # turtlebot4_viz — nhờ ./config đã mount vào /ros2_ws/config nên chỉnh sửa
+    # file .rviz trên host là live-reload, không cần build lại image.
+    # (Gọi rviz2 trực tiếp với cùng remap TF mà view_robot.launch.py dùng, để
+    # không phụ thuộc vào tên launch-arg rviz_config của bản turtlebot4_viz cài qua apt)
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
       sleep 8 &&
-      ros2 launch turtlebot4_viz view_robot.launch.py"
+      ros2 run rviz2 rviz2 -d /ros2_ws/config/rviz/tb4_view.rviz
+      --ros-args -p use_sim_time:=true -r /tf:=tf -r /tf_static:=tf_static"
 
   # ── 5. Task Manager (waypoints, patrol, memory) ──────────────────────────────
   task_manager:
