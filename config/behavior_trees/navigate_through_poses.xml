@@ -1,6 +1,6 @@
 <!--
   navigate_through_poses.xml
-  Tuần tra qua nhiều waypoint, có logic retry và recovery.
+  Multi-waypoint BT; recovery chỉ clear costmap (spin/backup do RecoveryManager lo).
 -->
 <root BTCPP_format="4" main_tree_to_execute="MainTree">
   <BehaviorTree ID="MainTree">
@@ -36,17 +36,12 @@
       </PipelineSequence>
       <ReactiveFallback name="RecoveryFallback">
         <GoalUpdated/>
-        <RoundRobin name="RecoveryActions">
-          <Sequence name="ClearingActions">
-            <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
-              service_name="local_costmap/clear_entirely_local_costmap"/>
-            <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
-              service_name="global_costmap/clear_entirely_global_costmap"/>
-          </Sequence>
-          <Spin spin_dist="1.57"/>
-          <Wait wait_duration="5.0"/>
-          <BackUp backup_dist="0.15" backup_speed="0.025"/>
-        </RoundRobin>
+        <Sequence name="ClearingActions">
+          <ClearEntireCostmap name="ClearLocalCostmap-Subtree"
+            service_name="local_costmap/clear_entirely_local_costmap"/>
+          <ClearEntireCostmap name="ClearGlobalCostmap-Subtree"
+            service_name="global_costmap/clear_entirely_global_costmap"/>
+        </Sequence>
       </ReactiveFallback>
     </RecoveryNode>
   </BehaviorTree>

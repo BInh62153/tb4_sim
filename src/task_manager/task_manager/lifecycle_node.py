@@ -14,6 +14,7 @@ Không có business logic ở đây — tất cả nằm trong managers/.
 """
 
 import uuid
+from typing import Optional
 
 import rclpy
 import rclpy.parameter
@@ -83,6 +84,11 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         # để 'resume' biết nên tiếp tục mission cycle hay explore.
         self._paused_from = None
 
+        # Chế độ điều khiển: robot chỉ tự chạy khi operator bật patrol/explore.
+        # None = chờ lệnh; 'patrol' = tuần tra mission; 'goto' = một lần tới waypoint.
+        self._mission_mode = None
+        self._pending_goto = None  # (wp_name, wp_data) khi mission_mode == 'goto'
+
         # ── Register event handlers ────────────────────────────────────────
         self._register_events()
 
@@ -147,7 +153,9 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._heartbeat = self.create_timer(1.0, self._publish_heartbeat)
 
         self._sm.force_transition(SystemState.IDLE, "on_activate")
-        self._cycle()
+        self.get_logger().info(
+            "[LC] Activated — chờ lệnh CLI (activate đã xong; dùng patrol/goto/explore)."
+        )
         return TransitionCallbackReturn.SUCCESS
 
     def on_deactivate(self, state: LCState) -> TransitionCallbackReturn:
@@ -184,7 +192,9 @@ class TurtleBot4LifecycleNode(LifecycleNode):
     # ═══════════════════════════════════════════════════════════════════════
 
     def _cycle(self):
-        """Fire-and-forget: chạy bước tiếp theo của mission nếu đang IDLE."""
+        """Fire-and-forget: bước tiếp theo của mission patrol (chỉ khi _mission_mode == 'patrol')."""
+        if self._mission_mode != 'patrol':
+            return
         if not self._sm.is_in(SystemState.IDLE):
             return
 
@@ -242,18 +252,33 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._do_recovery()
 
     def _on_tasks_complete(self, **_):
-        self._planner.advance_mission()
-        self._sm.transition(SystemState.IDLE, "tasks_done")
-        self._cycle()
+        if self._mission_mode == 'patrol':
+            self._planner.advance_mission()
+            self._sm.transition(SystemState.IDLE, "tasks_done")
+            self._cycle()
+        else:
+            # goto thủ công: xong task tại waypoint rồi dừng, không tuần tra tiếp
+            self._sm.transition(SystemState.IDLE, "goto_done")
+            self._mission_mode = None
+            self._pending_goto = None
 
     def _on_recovery_success(self, **_):
         self._sm.transition(SystemState.IDLE, "recovery_ok")
-        self._cycle()
+        if self._mission_mode == 'patrol':
+            self._cycle()
+        elif self._mission_mode == 'goto' and self._pending_goto:
+            wp_name, wp_data = self._pending_goto
+            self._send_goto(wp_name, wp_data)
 
     def _on_recovery_aborted(self, **_):
-        self._planner.advance_mission()
-        self._sm.transition(SystemState.IDLE, "recovery_abort_skip_wp")
-        self._cycle()
+        if self._mission_mode == 'patrol':
+            self._planner.advance_mission()
+            self._sm.transition(SystemState.IDLE, "recovery_abort_skip_wp")
+            self._cycle()
+        else:
+            self._sm.transition(SystemState.IDLE, "recovery_abort")
+            self._mission_mode = None
+            self._pending_goto = None
 
     def _on_battery_low(self, **_):
         if self._sm.is_in(SystemState.NAVIGATING, SystemState.EXECUTING_TASK, SystemState.EXPLORING):
@@ -274,7 +299,8 @@ class TurtleBot4LifecycleNode(LifecycleNode):
     def _on_charge_complete(self, **_):
         self._sm.transition(SystemState.RESUME_AFTER_CHARGE, "charge_done")
         self._sm.transition(SystemState.IDLE, "resume_mission")
-        self._cycle()
+        if self._mission_mode == 'patrol':
+            self._cycle()
 
     # ── Operator command events ─────────────────────────────────────────────
 
@@ -282,6 +308,8 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         if self._sm.is_in(SystemState.IDLE, SystemState.PAUSED, SystemState.EXPLORING):
             self._explore_mgr.stop()
             self._current_algo = algo
+            self._mission_mode = 'patrol'
+            self._pending_goto = None
             self._sm.force_transition(SystemState.IDLE, "cmd_patrol")
             self._cycle()
 
@@ -299,20 +327,22 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         self._executor.cancel()
         self._explore_mgr.stop()
         self._paused_from = None
+        self._mission_mode = None
+        self._pending_goto = None
         self._sm.force_transition(SystemState.PAUSED, "cmd_stop")
 
-    def _on_cmd_goto(self, wp_name: str = "", algo: str = "dwa", **_):
-        wp_data = self._planner.waypoints.get(wp_name)
-        if not wp_data:
-            self.get_logger().error(f"[CMD] goto: waypoint '{wp_name}' not found.")
-            return
+    def _send_goto(self, wp_name: str, wp_data: dict, algo: Optional[str] = None):
+        """Gửi một goal tới waypoint (goto thủ công hoặc retry sau recovery)."""
+        algo = algo or self._current_algo
         self._explore_mgr.stop()
+        self._mission_mode = 'goto'
+        self._pending_goto = (wp_name, wp_data)
         self._current_algo = algo
         self._nav_mgr.cancel()
         goal_id = str(uuid.uuid4())[:8]
         self._slog.goal_id  = goal_id
         self._slog.waypoint = wp_name
-        self._sm.force_transition(SystemState.NAVIGATING, f"cmd_goto={wp_name}")
+        self._sm.force_transition(SystemState.NAVIGATING, f"goto={wp_name}")
         self._nav_mgr.send_goal(
             wp_data,
             on_done = lambda success: self._sm.dispatch(
@@ -323,6 +353,13 @@ class TurtleBot4LifecycleNode(LifecycleNode):
             goal_id=goal_id,
             algo=algo,
         )
+
+    def _on_cmd_goto(self, wp_name: str = "", algo: str = "dwa", **_):
+        wp_data = self._planner.waypoints.get(wp_name)
+        if not wp_data:
+            self.get_logger().error(f"[CMD] goto: waypoint '{wp_name}' not found.")
+            return
+        self._send_goto(wp_name, wp_data, algo=algo)
 
     def _on_cmd_resume(self, **_):
         if not self._sm.is_in(SystemState.PAUSED):
@@ -338,6 +375,8 @@ class TurtleBot4LifecycleNode(LifecycleNode):
     def _on_cmd_explore(self, algo: str = "dwa", **_):
         if self._sm.is_in(SystemState.IDLE, SystemState.PAUSED):
             self._current_algo = algo
+            self._mission_mode = 'explore'
+            self._pending_goto = None
             self._sm.force_transition(SystemState.EXPLORING, "cmd_explore")
             self._explore_mgr.start(algo)
         elif self._sm.is_in(SystemState.EXPLORING):
@@ -411,7 +450,8 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         else:
             self.get_logger().error("[Dock] Docking failed.")
             self._sm.force_transition(SystemState.IDLE, "dock_failed_resume")
-            self._cycle()
+            if self._mission_mode == 'patrol':
+                self._cycle()
 
     def _do_recovery(self):
         self._recovery.start(on_complete=self._on_recovery_done)

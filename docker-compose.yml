@@ -110,6 +110,7 @@ services:
           cpus: "${SIM_CPU_LIMIT:-12}"
     command: >-
       bash -c "source /opt/ros/humble/setup.bash &&
+      /ros2_ws/scripts/set_motion_safety.sh &
       /ros2_ws/scripts/vgl_launch.sh
       ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py
       model:=lite world:=warehouse render_engine:=$$RENDER_ENGINE"
@@ -242,6 +243,7 @@ services:
       --ros-args -p use_sim_time:=true -r /tf:=tf -r /tf_static:=tf_static"
 
   # ── 5. Task Manager (waypoints, patrol, memory) ──────────────────────────────
+  # Chỉ auto-configure khi container lên; operator bật activate qua CLI (tb4_cli).
   task_manager:
     <<: *base
     container_name: tb4_task_manager
@@ -261,8 +263,7 @@ services:
           ros2 lifecycle list /task_manager_lifecycle_node >/dev/null 2>&1 && break
           sleep 1
         done
-        ros2 lifecycle set /task_manager_lifecycle_node configure &&
-        ros2 lifecycle set /task_manager_lifecycle_node activate ) &
+        ros2 lifecycle set /task_manager_lifecycle_node configure ) &
       wait $$TM_PID"
 
   # ── 6. Interactive CLI ───────────────────────────────────────────────────────

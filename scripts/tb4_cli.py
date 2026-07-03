@@ -5,6 +5,7 @@ from std_msgs.msg import String
 import threading
 import sys
 import readline
+import subprocess
 
 # ====== COLOR ======
 class C:
@@ -19,7 +20,21 @@ def c(color, msg):
     return f"{color}{msg}{C.END}"
 
 # ====== COMMAND LIST ======
-COMMANDS = ["goto", "patrol", "explore", "stop", "pause", "resume", "status", "help", "clear", "exit"]
+COMMANDS = ["activate", "start", "deactivate", "goto", "patrol", "explore", "stop", "pause", "resume", "status", "help", "clear", "exit"]
+
+TM_NODE = "/task_manager_lifecycle_node"
+
+def lifecycle_set(transition: str) -> tuple[bool, str]:
+    """Gọi ros2 lifecycle set; trả (ok, message)."""
+    try:
+        r = subprocess.run(
+            ["ros2", "lifecycle", "set", TM_NODE, transition],
+            capture_output=True, text=True, timeout=15,
+        )
+        out = (r.stdout + r.stderr).strip()
+        return r.returncode == 0, out or f"exit {r.returncode}"
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        return False, str(e)
 
 # ====== AUTOCOMPLETE ======
 def completer(text, state):
@@ -69,8 +84,10 @@ class TB4CLI(Node):
 def print_help():
     print(c(C.CYAN, "\n=== HỆ THỐNG THỬ NGHIỆM THUẬT TOÁN TURTLEBOT4 ==="))
     cmds = [
-        ("goto <đích> [algo]", "Di chuyển đến waypoint bằng thuật toán (Mặc định: dwa)"),
-        ("patrol [algo]",     "Tuần tra tự động bằng thuật toán chọn trước"),
+        ("activate / start",  "Bật task_manager (lifecycle activate) — bắt buộc trước patrol/goto"),
+        ("deactivate",        "Tắt task_manager (lifecycle deactivate)"),
+        ("goto <đích> [algo]", "Di chuyển một lần tới waypoint (xong thì dừng, không tuần tra tiếp)"),
+        ("patrol [algo]",     "Tuần tra tự động qua toàn bộ mission"),
         ("explore [algo]",    "Bật Frontier Exploration (Khám phá bản đồ) + thuật toán lái"),
         ("stop",              "Dừng robot ngay lập tức"),
         ("pause",             "Tạm dừng tác vụ hành trình"),
@@ -88,6 +105,7 @@ def print_help():
 # ====== CLI LOOP ======
 def cli_loop(node: TB4CLI, stop_event: threading.Event):
     print(c(C.GREEN, "=== TB4 MULTI-MODULE CLI PRO ==="))
+    print(c(C.DIM, "Luồng khuyến nghị: activate → goto/patrol/explore"))
     print(c(C.DIM, "Gõ 'help' để xem danh sách lệnh, Nhấn Tab để tự động điền (Autocomplete)\n"))
 
     while not stop_event.is_set():
@@ -110,6 +128,16 @@ def cli_loop(node: TB4CLI, stop_event: threading.Event):
             elif base_cmd == "clear":
                 print("\033[2J\033[H", end="")   # ANSI clear screen
                 print(c(C.GREEN, "=== TB4 MULTI-MODULE CLI PRO ===\n"))
+
+            elif base_cmd in ("activate", "start"):
+                ok, msg = lifecycle_set("activate")
+                color = C.GREEN if ok else C.RED
+                print(c(color, f"→ lifecycle activate: {msg}"))
+
+            elif base_cmd == "deactivate":
+                ok, msg = lifecycle_set("deactivate")
+                color = C.GREEN if ok else C.RED
+                print(c(color, f"→ lifecycle deactivate: {msg}"))
 
             elif base_cmd == "goto":
                 if len(parts) < 2:
