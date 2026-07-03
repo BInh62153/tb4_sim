@@ -1,6 +1,0 @@
-{"sessionId":"a3be86","timestamp":1782957513953,"location":"entrypoint.sh","message":"xvfb started","data":{"display":":99","resolution":"960x540x24","use_virtualgl":"false","vgl_display":"egl0"},"hypothesisId":"H4"}
-{"sessionId":"a3be86","timestamp":1782957514070,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
-{"sessionId":"a3be86","timestamp":1782959323116,"location":"entrypoint.sh","message":"xvfb started","data":{"display":":99","resolution":"960x540x24","use_virtualgl":"false","vgl_display":"egl0"},"hypothesisId":"H4"}
-{"sessionId":"a3be86","timestamp":1782959323239,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
-{"sessionId":"a3be86","timestamp":1782960198179,"location":"entrypoint.sh","message":"xvfb started","data":{"display":":99","resolution":"960x540x24","use_virtualgl":"false","vgl_display":"egl0"},"hypothesisId":"H4"}
-{"sessionId":"a3be86","timestamp":1782960198291,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}

@@ -1,0 +1,8 @@
+{"sessionId":"a3be86","timestamp":1782974851046,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
+{"sessionId":"a3be86","timestamp":1782974851047,"location":"vgl_launch.sh","message":"forcing llvmpipe direct rendering (no virtualgl)","data":{},"hypothesisId":"H5"}
+{"sessionId":"a3be86","timestamp":1782982626066,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
+{"sessionId":"a3be86","timestamp":1782982626067,"location":"vgl_launch.sh","message":"forcing llvmpipe direct rendering (no virtualgl)","data":{},"hypothesisId":"H5"}
+{"sessionId":"a3be86","timestamp":1782984758581,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
+{"sessionId":"a3be86","timestamp":1782984758582,"location":"vgl_launch.sh","message":"forcing llvmpipe direct rendering (no virtualgl)","data":{},"hypothesisId":"H5"}
+{"sessionId":"a3be86","timestamp":1783044764239,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
+{"sessionId":"a3be86","timestamp":1783044764240,"location":"vgl_launch.sh","message":"forcing llvmpipe direct rendering (no virtualgl)","data":{},"hypothesisId":"H5"}

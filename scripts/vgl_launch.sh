@@ -7,7 +7,7 @@ set -euo pipefail
 _dbg() {
   local msg="$1" data="$2" hid="${3:-H0}"
   printf '{"sessionId":"a3be86","timestamp":%s,"location":"vgl_launch.sh","message":"%s","data":%s,"hypothesisId":"%s"}\n' \
-    "$(date +%s%3N)" "$msg" "$data" "$hid" >> /ros2_ws/.cursor/debug-a3be86.log 2>/dev/null || true
+    "$(date +%s%3N)" "$msg" "$data" "$hid" >> /ros2_ws/.logs/debug-a3be86.log 2>/dev/null || true
 }
 #endregion
 
@@ -54,6 +54,20 @@ if [ "$USE_VGL" = "true" ] && [ -z "$VGL_BIN" ]; then
   _dbg "vglrun missing" "{}" "H1"
   #endregion
   export LIBGL_ALWAYS_SOFTWARE=1
+fi
+
+# FIX: USE_VIRTUALGL=false (chế độ CPU/Xvfb "known-working") trước đây KHÔNG set
+# LIBGL_ALWAYS_SOFTWARE=1 ở đây — Mesa thử tạo GL context "hardware" qua GLX chống
+# lại Xvfb (X server ảo không có DRI thật, dù /dev/dri có mount) rồi âm thầm rơi
+# xuống indirect GLX rendering (mỗi lệnh GL serialize qua X11 socket) → chậm
+# 100-1000x, CPU đo thấp vì phần lớn thời gian chờ round-trip chứ không tính toán.
+# Ép llvmpipe direct rendering ngay từ đầu để tránh hẳn đường indirect này.
+if [ "$USE_VGL" != "true" ]; then
+  export LIBGL_ALWAYS_SOFTWARE=1
+  export GALLIUM_DRIVER=llvmpipe
+  #region agent log
+  _dbg "forcing llvmpipe direct rendering (no virtualgl)" "{}" "H5"
+  #endregion
 fi
 
 exec "$@"

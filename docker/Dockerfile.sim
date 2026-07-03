@@ -126,6 +126,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libboost-all-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# --- Giảm update_rate của cliff & IR intensity sensor (Create3) ---
+# RPLIDAR (Nav2/SLAM cần) giữ nguyên rate. 4 cliff + 7 IR intensity sensor mặc
+# định chạy 62Hz (đúng tốc độ phần cứng thật) — trên llvmpipe (CPU/Xvfb software
+# rendering) 11 sensor raycast x 62Hz tranh chấp chung 1 context render là
+# nguyên nhân chính khiến real_time_factor sập xuống ~0.04. 2 sensor này không
+# được task_manager/Nav2 dùng cho patrol/explore, hạ xuống 5Hz vẫn đủ cho mọi
+# safety logic mô phỏng mà không ăn hết ngân sách render mỗi step.
+RUN sed -i 's/name="update_rate"[[:space:]]*value="62"/name="update_rate" value="5"/' \
+        /opt/ros/humble/share/irobot_create_description/urdf/sensors/cliff_sensor.urdf.xacro \
+    && sed -i 's/update_rate:=62\.0/update_rate:=5.0/' \
+        /opt/ros/humble/share/irobot_create_description/urdf/sensors/ir_intensity.urdf.xacro \
+    && grep -n "update_rate" /opt/ros/humble/share/irobot_create_description/urdf/sensors/cliff_sensor.urdf.xacro \
+    && grep -n "update_rate:=5" /opt/ros/humble/share/irobot_create_description/urdf/sensors/ir_intensity.urdf.xacro
+
 # Python Packages
 RUN pip3 install --no-cache-dir \
     numpy \
