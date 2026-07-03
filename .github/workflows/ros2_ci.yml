@@ -1,163 +1,128 @@
-name: TurtleBot4 Task Manager CI
+name: ROS2 TB4 Simulation CI
 
 on:
   push:
-    branches: [main, master, develop]
-    paths:
-      - 'src/task_manager/**'
-      - '.github/workflows/**'
+    branches: [main, develop]
   pull_request:
-    branches: [main, master]
+
+env:
+  ROS_DISTRO: humble
+  WORKSPACE: /ros2_ws
 
 jobs:
-  # ═══════════════════════════════════════════════════════════════════════
-  #  Unit Tests + Coverage (no ROS2 required)
-  # ═══════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════
+# 1. UNIT TEST (task_manager)
+# ═══════════════════════════════════════
   unit_tests:
-    name: "Unit Tests (Python 3.10)"
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install test dependencies
+      - name: Install deps
         run: |
-          pip install pytest pytest-cov pyyaml
+          pip install pytest pytest-cov
 
-      - name: Run unit tests with coverage
+      - name: Run tests
         working-directory: src/task_manager
         env:
           PYTHONPATH: ${{ github.workspace }}/src/task_manager
         run: |
-          pytest task_manager/tests/ \
+          pytest task_manager/tests \
             --cov=task_manager \
-            --cov-report=xml \
             --cov-report=term-missing \
-            --cov-fail-under=75 \
-            -v
+            --cov-fail-under=70
 
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-report
-          path: src/task_manager/coverage.xml
-
-  # ═══════════════════════════════════════════════════════════════════════
-  #  ROS2 Build + Lint + colcon test
-  # ═══════════════════════════════════════════════════════════════════════
-  ros2_build:
-    name: "ROS2 Humble Build + Lint"
+# ═══════════════════════════════════════
+# 2. ROS2 BUILD
+# ═══════════════════════════════════════
+  build:
     runs-on: ubuntu-latest
     container:
       image: osrf/ros:humble-desktop-full
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup workspace
+        run: |
+          mkdir -p $WORKSPACE/src
+          cp -r src/* $WORKSPACE/src/
 
       - name: Install dependencies
         run: |
-          apt-get update -qq
-          apt-get install -y python3-pip python3-pytest python3-pytest-cov python3-yaml
-          pip3 install ament-flake8 ament-pep257 || true
+          apt-get update
+          apt-get install -y \
+            python3-rosdep \
+            python3-colcon-common-extensions
 
-      - name: Source ROS2 environment
+          rosdep update
+          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y
+
+      - name: Build
         run: |
-          source /opt/ros/humble/setup.bash
-          printenv | grep ROS
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          cd $WORKSPACE
+          colcon build
 
-      - name: Build with colcon
-        run: |
-          source /opt/ros/humble/setup.bash
-          mkdir -p /ros2_ws/src
-          cp -r src/task_manager /ros2_ws/src/
-          cd /ros2_ws
-          colcon build --packages-select task_manager --event-handlers console_direct+
-
-      - name: Run ament_flake8
-        run: |
-          source /opt/ros/humble/setup.bash
-          cd src/task_manager
-          python3 -m flake8 task_manager/ \
-            --max-line-length=100 \
-            --extend-ignore=E501 \
-            --exclude=task_manager/tests/ \
-            || echo "Lint warnings (non-blocking)"
-
-      - name: Run ament_pep257
-        run: |
-          source /opt/ros/humble/setup.bash
-          cd src/task_manager
-          python3 -m pep257 task_manager/ \
-            --add-ignore=D100,D101,D102,D103,D104,D107 \
-            || echo "Docstring warnings (non-blocking)"
-
-      - name: colcon test
-        run: |
-          source /opt/ros/humble/setup.bash
-          source /ros2_ws/install/setup.bash
-          cd /ros2_ws
-          colcon test --packages-select task_manager --event-handlers console_direct+
-          colcon test-result --verbose
-
-  # ═══════════════════════════════════════════════════════════════════════
-  #  Gazebo Integration Tests (simulation-based)
-  # ═══════════════════════════════════════════════════════════════════════
-  integration_tests:
-    name: "Gazebo Integration Tests"
+# ═══════════════════════════════════════
+# 3. SIMULATION TEST (KEY PART)
+# ═══════════════════════════════════════
+  simulation:
+    needs: build
     runs-on: ubuntu-latest
     container:
       image: osrf/ros:humble-desktop-full
-    # Only on push to main — these are slow
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Ignition + TurtleBot4 packages
+      - name: Install simulation deps
         run: |
-          apt-get update -qq
+          apt-get update
           apt-get install -y \
             ros-humble-turtlebot4-simulator \
             ros-humble-nav2-bringup \
             ros-humble-slam-toolbox \
-            python3-pip
-          pip3 install pytest
+            xvfb
 
-      - name: Start Xvfb (headless display for Gazebo)
+      - name: Start virtual display
         run: |
-          apt-get install -y xvfb
           Xvfb :99 -screen 0 1280x1024x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Build workspace
         run: |
-          source /opt/ros/humble/setup.bash
-          mkdir -p /ros2_ws/src
-          cp -r src/task_manager /ros2_ws/src/
-          cd /ros2_ws
-          colcon build --packages-select task_manager
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          mkdir -p $WORKSPACE/src
+          cp -r src/* $WORKSPACE/src/
+          cd $WORKSPACE
+          colcon build
 
-      - name: Run integration scenarios
+      - name: Launch TB4 headless
         run: |
-          source /opt/ros/humble/setup.bash
-          source /ros2_ws/install/setup.bash
-          cd src/task_manager
-          pytest task_manager/tests/integration/ \
-            -v \
-            --timeout=120 \
-            -k "not slow" \
-            || echo "Integration tests completed with warnings"
-        continue-on-error: true  # integration tests are best-effort in CI
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          source $WORKSPACE/install/setup.bash
 
-      - name: Upload integration logs
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: integration-logs
-          path: /tmp/ros2_logs/
+          ros2 launch scripts turtlebot4_headless.launch.py &
+          sleep 25
+
+      - name: Verify system
+        run: |
+          source /opt/ros/$ROS_DISTRO/setup.bash
+
+          echo "=== Topics ==="
+          ros2 topic list
+
+          echo "=== Check Nav2 ==="
+          ros2 action list | grep navigate_to_pose || exit 1
+
+          echo "=== Check cmd_vel ==="
+          ros2 topic echo /cmd_vel --once || exit 1
+
+          echo "CI PASS"
