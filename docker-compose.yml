@@ -46,7 +46,7 @@ x-sim-env: &sim-env
   # đang cho hiệu năng kém hơn CPU/Xvfb ở máy này (RTX 3050 Ti + Hyprland/Xwayland
   # gặp vấn đề cấp EGL context). Mặc định false = CPU render (known-working).
   # Set "true" để thử lại đường GPU khi driver/EGL đã ổn định hơn.
-  USE_VIRTUALGL: "${USE_VIRTUALGL:-false}"
+  USE_VIRTUALGL: "${USE_VIRTUALGL:-true}"
   VGL_DISPLAY: "${VGL_DISPLAY:-egl0}"  # egl0 trong Docker; :0 nếu host có NVIDIA X
   VGL_PROBEGLX: "0"
   NVIDIA_VISIBLE_DEVICES: all

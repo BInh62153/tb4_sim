@@ -6,3 +6,11 @@
 {"sessionId":"a3be86","timestamp":1782984758582,"location":"vgl_launch.sh","message":"forcing llvmpipe direct rendering (no virtualgl)","data":{},"hypothesisId":"H5"}
 {"sessionId":"a3be86","timestamp":1783044764239,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
 {"sessionId":"a3be86","timestamp":1783044764240,"location":"vgl_launch.sh","message":"forcing llvmpipe direct rendering (no virtualgl)","data":{},"hypothesisId":"H5"}
+{"sessionId":"a3be86","timestamp":1783045717884,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"false","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
+{"sessionId":"a3be86","timestamp":1783045717885,"location":"vgl_launch.sh","message":"forcing llvmpipe direct rendering (no virtualgl)","data":{},"hypothesisId":"H5"}
+{"sessionId":"a3be86","timestamp":1783046541016,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"true","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
+{"sessionId":"a3be86","timestamp":1783046541177,"location":"vgl_launch.sh","message":"vglrun glxinfo ok","data":{"renderer":"OpenGL renderer string: NVIDIA GeForce RTX 3050 Ti Laptop GPU/PCIe/SSE2"},"hypothesisId":"H2"}
+{"sessionId":"a3be86","timestamp":1783046541178,"location":"vgl_launch.sh","message":"exec vglrun","data":{"cmd":"ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py model:=lite world:=warehouse render_engine:=ogre"},"hypothesisId":"H3"}
+{"sessionId":"a3be86","timestamp":1783046973852,"location":"vgl_launch.sh","message":"vgl_launch entry","data":{"use_virtualgl":"true","vglrun_found":true,"display":":99","vgl_display":"egl0"},"hypothesisId":"H1"}
+{"sessionId":"a3be86","timestamp":1783046973976,"location":"vgl_launch.sh","message":"vglrun glxinfo ok","data":{"renderer":"OpenGL renderer string: NVIDIA GeForce RTX 3050 Ti Laptop GPU/PCIe/SSE2"},"hypothesisId":"H2"}
+{"sessionId":"a3be86","timestamp":1783046973977,"location":"vgl_launch.sh","message":"exec vglrun","data":{"cmd":"ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py model:=lite world:=warehouse render_engine:=ogre"},"hypothesisId":"H3"}
