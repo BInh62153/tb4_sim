@@ -10,11 +10,11 @@ A full **TurtleBot4** simulation stack on **ROS2 Humble**, running via **Docker 
 * SLAM mapping with **slam_toolbox**
 * Autonomous navigation with **Nav2**, with **runtime controller selection** via a single latched `/controller_selector` topic (DWA / TEB / Pure Pursuit — Stanley currently disabled, see [Roadmap](#roadmap))
 * **Frontier Exploration** (`m-explore-ros2` / `explore_lite`) — automatic map exploration, using the *same* `/controller_selector` mechanism as manual navigation (no C++ patch needed)
-* **Task Manager**: lifecycle node, event-driven architecture, cleanly split into managers (mission, navigation, recovery, battery, dock, task executor, explore)
+* **Task Manager**: lifecycle node, event-driven architecture, cleanly split into managers (mission, navigation, recovery, battery, dock, task executor, explore). **Manual-first control**: stack starts configured but inactive; operator runs `activate` in the CLI before sending any motion command — robot does not move on its own when RViz opens
 * Centralized state machine with an explicit transition table (11 states, every transition validated)
-* Nav2-standard 6-level recovery (wait → clear local costmap → clear global costmap → spin → backup → replan/abort)
-* Battery monitoring + automatic docking/charging when low, auto-resumes mission after charging
-* Interactive CLI over `/tb4/cmd` + `/tb4/status`, with tab autocomplete
+* **Two-tier recovery**: Nav2 BT clears costmaps only; `RecoveryManager` (Python) runs the full 6-level pipeline (wait → clear costmaps → spin → backup → replan/abort) with structured logs — avoids duplicate backup commands that trigger Create3's backup limit
+* Battery monitoring + automatic docking/charging when low; auto-resumes **patrol** after charging (manual `goto` does not resume a mission loop)
+* Interactive CLI: lifecycle control (`activate`/`deactivate`) + mission commands over `/tb4/cmd` + `/tb4/status`, with tab autocomplete
 * Multi-profile Docker Compose (`sim` / `nav` / `full` / `rviz`), per-service healthchecks, per-service CPU limits
 * Tuned for real-time performance on modest GPUs/CPUs — see [Performance Tuning](#performance-tuning)
 * Unit tests for all managers + the state machine (pytest)
@@ -128,6 +128,17 @@ ABORTED ─► IDLE | UNCONFIGURED
 
 Every operator command from the CLI is routed through an `Event`: `CMD_GOTO`, `CMD_PATROL`, `CMD_EXPLORE`, `CMD_PAUSE`, `CMD_RESUME`, `CMD_STOP`. When `pause` is issued while in `EXPLORING`, the node remembers `_paused_from = 'explore'` so `resume` knows to return to exploring instead of the mission patrol.
 
+**Mission modes** (`_mission_mode` in `lifecycle_node.py`):
+
+| Mode | Trigger | Behavior after goal/tasks finish |
+| ---- | ------- | -------------------------------- |
+| `None` | Stack up / `stop` / `goto` done | Robot stays idle — waits for next command |
+| `patrol` | CLI `patrol` | Advances `patrol_sequence` and loops (if `loop_patrol: true`) |
+| `goto` | CLI `goto` | Returns to IDLE once — does **not** continue patrol |
+| `explore` | CLI `explore` | Runs frontier exploration until `stop`/`pause` |
+
+On container start the task manager is **configured only** (lifecycle state `inactive`). `activate` (via CLI) enables `/tb4/cmd` subscription and battery monitoring but does **not** auto-start patrol.
+
 ---
 
 ## Repository Structure
@@ -151,8 +162,9 @@ Every operator command from the CLI is routed through an `Event`: `CMD_GOTO`, `C
 ├── scripts/
 │   ├── turtlebot4_headless.launch.py   launches Gazebo via gz_sim.launch.py (-s server-only)
 │   ├── vgl_launch.sh                   vglrun wrapper for the simulator, with CPU-fallback hardening
+│   ├── set_motion_safety.sh            sets Create3 motion_control safety_override=backup_only at sim start
 │   ├── send_waypoints.py
-│   └── tb4_cli.py                      interactive CLI (goto/patrol/explore/stop/pause/resume/status)
+│   └── tb4_cli.py                      interactive CLI (activate/patrol/goto/explore/stop/pause/resume/status)
 │
 ├── src/
 │   ├── task_manager/           main package — see details above
@@ -179,6 +191,10 @@ Every operator command from the CLI is routed through an `Event`: `CMD_GOTO`, `C
 
 Startup order relies on `depends_on: condition: service_healthy` — each service only starts once the previous one is healthy (e.g. `slam` waits for `simulator` to have `/scan`, `/tf` (via `tf2_echo odom base_link`, not a random `/tf` sample), and sim clock ≥ 5s before starting).
 
+The `task_manager` service auto-runs `ros2 lifecycle set … configure` only. **Activate** is left to the operator via CLI (`activate` / `start`) so the robot stays still until explicitly commanded.
+
+The `simulator` service runs `set_motion_safety.sh` in the background to set Create3 `motion_control` `safety_override=backup_only`, allowing Nav2/`RecoveryManager` backup actions without hitting the default backup distance limit.
+
 **Rendering modes:**
 * `simulator`: headless inside Xvfb (`DISPLAY=:99`). By default runs **VirtualGL** (`USE_VIRTUALGL=true`, `vglrun`, `egl0` backend) to use the real NVIDIA GPU for the Gazebo server + camera sensors (the OAK-D camera still spawns an OGRE render thread even with `-s`). `vgl_launch.sh` probes `vglrun glxinfo` before launch and automatically falls back to `LIBGL_ALWAYS_SOFTWARE=1` (software rendering) if the EGL/GLX context can't be created. Set `USE_VIRTUALGL=false` to force the CPU path directly — `vgl_launch.sh` then explicitly exports `LIBGL_ALWAYS_SOFTWARE=1` + `GALLIUM_DRIVER=llvmpipe` so Mesa never silently falls back to *indirect* GLX over the X11 socket (indirect GLX serializes every GL call and used to tank real-time factor by 100-1000x).
 * `slam` / `navigation` / `task_manager` / `cli`: fully headless, **do not** start Xvfb (`START_XVFB=false`).
@@ -199,6 +215,7 @@ Everything below is override-able via `.env` or an exported shell variable befor
 | `SIM_CPU_LIMIT` | `12` | CPU core cap for the `simulator` service (heaviest). |
 | `SLAM_CPU_LIMIT` | `3` | CPU core cap for `slam`. |
 | `NAV_CPU_LIMIT` | `4` | CPU core cap for `navigation`. |
+| `MOTION_SAFETY_OVERRIDE` | `backup_only` | Create3 `motion_control.safety_override` set by `set_motion_safety.sh` at sim start. Use `none` (default Create3) or `full` only when debugging safety behavior. |
 
 Adjust the `*_CPU_LIMIT` values to match `nproc` on your machine. `deploy.resources.limits` requires **Docker Compose v2** (`docker compose`, not the legacy `docker-compose` v1 binary) to take effect outside Swarm mode — check with `docker compose version`.
 
@@ -223,7 +240,7 @@ If RTF is still low after all of the above, check `ros2 topic hz /scan` and `doc
 
 | Topic                  | Direction            | Purpose                                                 |
 | ----------------------- | --------------------- | ---------------------------------------------------------- |
-| `/tb4/cmd`              | CLI → task_manager     | Operator commands (`goto:wp:algo`, `patrol:algo`, `explore:algo`, `stop`, `pause`, `resume`) |
+| `/tb4/cmd`              | CLI → task_manager     | Operator commands (`goto:wp:algo`, `goto_pos:x:y:z:yaw:algo`, `patrol:algo`, `explore:algo`, `stop`, `pause`, `resume`) |
 | `/tb4/status`           | task_manager → CLI      | 1Hz heartbeat: state + mission summary + battery           |
 | `/controller_selector`  | task_manager → Nav2 BT  | Runtime controller plugin selection (`FollowPathDWA`/`TEB`/`PP`), latched (`TRANSIENT_LOCAL`), published by both `NavigationManager` and `ExploreManager` |
 | `/explore/resume`       | task_manager → explore_lite | Toggle frontier search on/off (pause doesn't kill the process) |
@@ -238,6 +255,7 @@ If RTF is still low after all of the above, check `ros2 topic hz /scan` and `doc
 | ----------------- | ------------------------ |
 | `NavigateToPose`  | NavigationManager         |
 | `Spin`            | RecoveryManager           |
+| `BackUp`          | RecoveryManager           |
 
 ### Services
 
@@ -283,9 +301,33 @@ chmod +x tb4sim.sh
 ```bash
 ./tb4sim.sh sim       # Gazebo only
 ./tb4sim.sh nav        # Gazebo + SLAM + Nav2
-./tb4sim.sh full       # full stack (+ task_manager)
+./tb4sim.sh full       # full stack (+ task_manager, configured but inactive)
 ./tb4sim.sh rviz       # RViz2 on host X (run alongside another profile)
 ./tb4sim.sh cli        # open the control CLI
+```
+
+### 5. Recommended control flow (`full` profile)
+
+Opening RViz does **not** start the robot. After the stack is healthy:
+
+```bash
+./tb4sim.sh cli
+```
+
+```text
+> activate              # lifecycle activate — required before any motion command
+> status                # state=IDLE, task_manager active
+> goto diem_C dwa       # one-shot navigation; stops when done (no auto-patrol)
+> patrol dwa            # start full patrol loop from waypoints.yaml
+> stop                  # halt and clear mission mode
+> deactivate            # lifecycle deactivate (optional shutdown)
+```
+
+Verify lifecycle state from any container:
+
+```bash
+ros2 lifecycle get /task_manager_lifecycle_node   # inactive [2] until activate → active [3]
+ros2 param get /motion_control safety_override    # backup_only (after sim is up)
 ```
 
 ---
@@ -310,24 +352,27 @@ watchdog         Loop that auto-restarts unhealthy containers (60s cooldown)
 
 ## CLI (`tb4_cli.py`)
 
-Communicates over `/tb4/cmd` (publish) and `/tb4/status` (subscribe), with Tab autocomplete for commands and waypoint names.
+Communicates over `/tb4/cmd` (publish) and `/tb4/status` (subscribe), with Tab autocomplete for commands and waypoint names. Lifecycle transitions (`activate`/`deactivate`) call `ros2 lifecycle set` directly — they do not go through `/tb4/cmd`.
 
 ```text
-goto <target> [algo]   Move to a waypoint using the given algorithm (default dwa)
-patrol [algo]           Start automatic patrol following patrol_sequence in waypoints.yaml
-explore [algo]           Enable Frontier Exploration (automatic map exploration)
-stop                     Stop the robot + cancel any running task
-pause                    Pause (remembers whether it was mission or explore)
-resume                   Resume whichever flow was paused
-status                   Show current status (state, mission, battery)
-help                     Show the command menu
-clear                    Clear the screen
-exit                     Exit the CLI
+activate / start       Lifecycle activate task_manager (required before patrol/goto/explore)
+deactivate             Lifecycle deactivate task_manager
+goto <target> [algo]   Move once to a waypoint from waypoints.yaml
+goto x y [z] [yaw] [algo]   Move once to map coordinates (yaw in radians, default 0)
+patrol [algo]          Start automatic patrol following patrol_sequence in waypoints.yaml
+explore [algo]         Enable Frontier Exploration (automatic map exploration)
+stop                   Stop the robot + cancel any running task + clear mission mode
+pause                  Pause (remembers whether it was mission or explore)
+resume                 Resume whichever flow was paused
+status                 Lifecycle state + robot heartbeat (works before/after activate)
+help                   Show the command menu
+clear                  Clear the screen
+exit                   Exit the CLI
 
 supported algo values: dwa | teb | pp | stanley (stanley currently falls back to dwa — controller not built yet)
 ```
 
-Examples: `goto diem_B teb`, `patrol pp`, `explore dwa`.
+Examples: `activate`, `status`, `goto diem_B teb`, `goto 3.5 3.5 0 1.57 dwa`, `patrol pp`.
 
 ---
 
@@ -361,20 +406,30 @@ After editing the file, restart the task manager to reload the config:
 
 ```bash
 docker restart tb4_task_manager
+# then in CLI: activate  (container only auto-configures on start)
 ```
 
 ---
 
 ## Recovery Behaviors
 
-`RecoveryManager` runs through 6 levels, stopping at the first one that succeeds, and `abort`s (skipping the current waypoint) if all 6 fail:
+Recovery is split across two layers to avoid duplicate spin/backup commands (which caused Create3 `Reached backup limit!` and stuck navigation):
 
-1. Wait
+| Layer | File | What it does |
+| ----- | ---- | ------------ |
+| Nav2 BT | `config/behavior_trees/navigate_to_pose.xml` | On nav failure: clear local + global costmap only |
+| Task Manager | `recovery_manager.py` | Full 6-level pipeline after Nav2 goal fails |
+
+`RecoveryManager` runs through 6 levels, stopping at the first one that succeeds, and `abort`s (skipping the current waypoint during **patrol**) if all 6 fail:
+
+1. Wait 2 s
 2. Clear local costmap
 3. Clear global costmap
 4. Spin 90°
-5. Backup 0.2 m
-6. Replan (retry the nav goal) → `ABORTED` if it still fails
+5. Backup 0.2 m (requires `safety_override=backup_only` on Create3 `motion_control` — set automatically by `set_motion_safety.sh`)
+6. Replan (retry the nav goal) → skip waypoint / stop (patrol vs manual `goto`)
+
+During **manual `goto`**, recovery retries the same waypoint; on final abort the robot returns to IDLE without starting patrol.
 
 ---
 
@@ -452,6 +507,23 @@ docker exec tb4_simulator printenv USE_VIRTUALGL RENDER_ENGINE
 ./tb4sim.sh logs navigation | grep ERROR
 ```
 
+**Robot stuck during navigation / `Reached backup limit!` in simulator logs**
+
+Nav2 BT and `RecoveryManager` both used to command backup; Create3 defaults to `safety_override=none`. Confirm the sim startup script applied the override:
+
+```bash
+ros2 param get /motion_control safety_override   # expect: backup_only
+./tb4sim.sh logs simulator | grep set_motion_safety
+```
+
+**Robot moves as soon as RViz opens (unexpected auto-patrol)**
+
+The task manager should start **inactive**. If it auto-patrols, check whether something else is calling `ros2 lifecycle set … activate` or sending `/tb4/cmd`. Expected flow: `./tb4sim.sh cli` → `activate` → `patrol` or `goto`.
+
+```bash
+ros2 lifecycle get /task_manager_lifecycle_node
+```
+
 **No LiDAR**
 
 ```bash
@@ -479,7 +551,9 @@ docker exec -it tb4_navigation printenv RMW_IMPLEMENTATION
 * ✓ Nav2 navigation, multiple runtime controllers (DWA/TEB/PP)
 * ✓ SLAM mapping
 * ✓ Waypoint patrol + task execution at each waypoint
-* ✓ Recovery behaviors (6 levels)
+* ✓ Recovery behaviors (6 levels, BT costmap-only + RecoveryManager spin/backup)
+* ✓ Manual-first operator control (configure on start, CLI `activate`, `goto` one-shot vs `patrol` loop)
+* ✓ Create3 backup safety override for sim recovery (`set_motion_safety.sh`)
 * ✓ Battery monitoring + auto-dock/charge
 * ✓ Frontier exploration (explore_lite) + controller sync via shared `/controller_selector` topic
 * ✓ Unit testing (managers + state machine)

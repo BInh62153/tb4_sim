@@ -98,7 +98,7 @@ class NavigationManager:
 
         goal.pose.pose.position.x = float(pose.get('x', 0.0))
         goal.pose.pose.position.y = float(pose.get('y', 0.0))
-        goal.pose.pose.position.z = 0.0
+        goal.pose.pose.position.z = float(pose.get('z', 0.0))
 
         yaw = float(pose.get('yaw', 0.0))
         cy  = math.cos(yaw * 0.5)

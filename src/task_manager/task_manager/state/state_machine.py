@@ -44,6 +44,7 @@ class Event(Enum):
     CMD_PAUSE           = auto()
     CMD_STOP            = auto()
     CMD_GOTO            = auto()
+    CMD_GOTO_POS        = auto()
     CMD_RESUME          = auto()
     CMD_EXPLORE         = auto()
 

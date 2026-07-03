@@ -110,6 +110,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
         sm.register(Event.CMD_PAUSE,          self._on_cmd_pause)
         sm.register(Event.CMD_STOP,           self._on_cmd_stop)
         sm.register(Event.CMD_GOTO,           self._on_cmd_goto)
+        sm.register(Event.CMD_GOTO_POS,       self._on_cmd_goto_pos)
         sm.register(Event.CMD_RESUME,         self._on_cmd_resume)
         sm.register(Event.CMD_EXPLORE,        self._on_cmd_explore)
 
@@ -361,6 +362,19 @@ class TurtleBot4LifecycleNode(LifecycleNode):
             return
         self._send_goto(wp_name, wp_data, algo=algo)
 
+    def _on_cmd_goto_pos(
+        self,
+        x: float = 0.0,
+        y: float = 0.0,
+        z: float = 0.0,
+        yaw: float = 0.0,
+        algo: str = "dwa",
+        **_,
+    ):
+        label = f"@{x:.2f},{y:.2f},{z:.2f}"
+        wp_data = {'pose': {'x': x, 'y': y, 'z': z, 'yaw': yaw}, 'tasks': []}
+        self._send_goto(label, wp_data, algo=algo)
+
     def _on_cmd_resume(self, **_):
         if not self._sm.is_in(SystemState.PAUSED):
             return
@@ -425,6 +439,21 @@ class TurtleBot4LifecycleNode(LifecycleNode):
             algo = parts[2].lower() if len(parts) > 2 and parts[2] else 'dwa'
             self._sm.dispatch(Event.CMD_GOTO, wp_name=wp_name, algo=algo)
 
+        elif base == 'goto_pos':
+            if len(parts) < 3:
+                self.get_logger().warn(f"[CMD] goto_pos thiếu tọa độ: '{text}'")
+                return
+            try:
+                x = float(parts[1])
+                y = float(parts[2])
+                z = float(parts[3]) if len(parts) > 3 and parts[3] else 0.0
+                yaw = float(parts[4]) if len(parts) > 4 and parts[4] else 0.0
+                algo = parts[5].lower() if len(parts) > 5 and parts[5] else 'dwa'
+            except ValueError:
+                self.get_logger().warn(f"[CMD] goto_pos tọa độ không hợp lệ: '{text}'")
+                return
+            self._sm.dispatch(Event.CMD_GOTO_POS, x=x, y=y, z=z, yaw=yaw, algo=algo)
+
         elif base == 'explore':
             algo = parts[1].lower() if len(parts) > 1 and parts[1] else 'dwa'
             self._sm.dispatch(Event.CMD_EXPLORE, algo=algo)
@@ -469,6 +498,7 @@ class TurtleBot4LifecycleNode(LifecycleNode):
             msg      = String()
             msg.data = (
                 f"state={self._sm.state.name} | "
+                f"mode={self._mission_mode or 'none'} | "
                 f"{self._planner.status_summary()} | "
                 f"bat={self._battery.status_str()}"
             )
