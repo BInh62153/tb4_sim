@@ -6,16 +6,17 @@ A full **TurtleBot4** simulation stack on **ROS2 Humble**, running via **Docker 
 
 ## Features
 
-* **Ignition Gazebo Fortress** simulation, running headless via **Xvfb + VirtualGL** (NVIDIA GPU acceleration), with server/GUI split
+* **Ignition Gazebo Fortress** simulation, running headless via **Xvfb + VirtualGL** (NVIDIA GPU acceleration by default, with a hardened CPU/`llvmpipe` fallback), server/GUI split
 * SLAM mapping with **slam_toolbox**
-* Autonomous navigation with **Nav2**, with **runtime controller selection** via `/controller_selector` (DWA / TEB / Pure Pursuit — Stanley currently disabled, see [Roadmap](#roadmap))
-* **Frontier Exploration** (`m-explore-ros2` / `explore_lite`) — automatic map exploration, synced with the same controller algorithm as navigation
+* Autonomous navigation with **Nav2**, with **runtime controller selection** via a single latched `/controller_selector` topic (DWA / TEB / Pure Pursuit — Stanley currently disabled, see [Roadmap](#roadmap))
+* **Frontier Exploration** (`m-explore-ros2` / `explore_lite`) — automatic map exploration, using the *same* `/controller_selector` mechanism as manual navigation (no C++ patch needed)
 * **Task Manager**: lifecycle node, event-driven architecture, cleanly split into managers (mission, navigation, recovery, battery, dock, task executor, explore)
 * Centralized state machine with an explicit transition table (11 states, every transition validated)
 * Nav2-standard 6-level recovery (wait → clear local costmap → clear global costmap → spin → backup → replan/abort)
 * Battery monitoring + automatic docking/charging when low, auto-resumes mission after charging
 * Interactive CLI over `/tb4/cmd` + `/tb4/status`, with tab autocomplete
-* Multi-profile Docker Compose (`sim` / `nav` / `full` / `rviz`), per-service healthchecks
+* Multi-profile Docker Compose (`sim` / `nav` / `full` / `rviz`), per-service healthchecks, per-service CPU limits
+* Tuned for real-time performance on modest GPUs/CPUs — see [Performance Tuning](#performance-tuning)
 * Unit tests for all managers + the state machine (pytest)
 
 ---
@@ -42,8 +43,12 @@ A full **TurtleBot4** simulation stack on **ROS2 Humble**, running via **Docker 
         │                │                                │            │
         │                ▼                                │            ▼
         │        Nav2 (NavigateToPose)              (nav + battery)  explore_lite
-        │        + /controller_selector                              (subprocess)
-        │                │
+        │        + /controller_selector (latched)                    (subprocess)
+        │                │                                            │
+        │                └───────────────┬────────────────────────────┘
+        │                                 ▼
+        │                    /controller_selector (shared, TRANSIENT_LOCAL)
+        │
         └──────► RecoveryManager (6-level recovery)
                          │
                          ▼
@@ -77,7 +82,7 @@ lifecycle_node.py  (TurtleBot4LifecycleNode)
          ├── battery_manager.py     monitors /battery_state, emits BATTERY_LOW/CRITICAL/CHARGE_COMPLETE
          ├── dock_manager.py        orchestrates docking + waiting for charge + resume
          ├── task_executor.py       runs tasks at a waypoint (wait/rotate/scan/log)
-         └── explore_manager.py     starts/stops/pauses explore_lite, syncs controller_id
+         └── explore_manager.py     starts/stops/pauses explore_lite, syncs controller via /controller_selector
 ```
 
 ### Controller (algorithm) selection mechanism
@@ -91,7 +96,11 @@ The CLI lets you pick a driving algorithm per `goto` / `patrol` / `explore` comm
 | `pp`      | `FollowPathPP` (`nav2_regulated_pure_pursuit_controller`) | Working                  |
 | `stanley` | `FollowPathStanley`                                | **Disabled** — `nav2_stanley_controller` not built yet, see Roadmap |
 
-`NavigationManager` publishes the controller name to `/controller_selector` before sending each `NavigateToPose` goal. `ExploreManager` does the same for `explore_node` via the `set_parameters` service (requires a small patch in `explore.cpp` so the node reads the `controller_id` parameter — see the docstring in `explore_manager.py`).
+Both `NavigationManager` and `ExploreManager` publish the controller name to the same `/controller_selector` topic before sending a `NavigateToPose` goal — this is the topic the BT `ControllerSelector` node (declared in `navigate_to_pose.xml` / `navigate_through_poses.xml`) already reads for **any** client, including goals sent by `explore_lite` itself. No custom `set_parameters` service call and no patch to `explore.cpp` are needed anymore.
+
+The publisher uses a **latched QoS** (`TRANSIENT_LOCAL`, depth 1): a late-joining subscriber (e.g. the `ControllerSelector` BT node, which is recreated by Nav2 on every goal) still receives the last published value immediately, without the node having to block waiting for `get_subscription_count() > 0`. This replaced an old `time.sleep()` polling loop that stalled the whole single-threaded executor for up to 0.5 s on every `goto`/`patrol` command (the cause of the CLI feeling laggy).
+
+The BT XML's `default_controller` was also fixed from the non-existent `"FollowPath"` to `"FollowPathDWA"`, so navigation still works correctly even before the first `/controller_selector` message arrives.
 
 ---
 
@@ -129,6 +138,7 @@ Every operator command from the CLI is routed through an `Event`: `CMD_GOTO`, `C
 │   ├── behavior_trees/        navigate_to_pose.xml, navigate_through_poses.xml
 │   ├── cyclonedds/            cyclonedds.xml
 │   ├── nav2/                  nav2_params.yaml (controller/planner/costmap/BT/recovery)
+│   ├── rviz/                  tb4_view.rviz (custom RViz layout, OAK-D image + scan + costmaps)
 │   ├── slam/                  slam_toolbox_params.yaml
 │   └── waypoints.yaml         waypoints + patrol_sequence + emergency_rules
 │
@@ -140,7 +150,7 @@ Every operator command from the CLI is routed through an `Event`: `CMD_GOTO`, `C
 │
 ├── scripts/
 │   ├── turtlebot4_headless.launch.py   launches Gazebo via gz_sim.launch.py (-s server-only)
-│   ├── vgl_launch.sh                   vglrun wrapper for the simulator
+│   ├── vgl_launch.sh                   vglrun wrapper for the simulator, with CPU-fallback hardening
 │   ├── send_waypoints.py
 │   └── tb4_cli.py                      interactive CLI (goto/patrol/explore/stop/pause/resume/status)
 │
@@ -150,6 +160,7 @@ Every operator command from the CLI is routed through an `Event`: `CMD_GOTO`, `C
 │   ├── m-explore-ros2/         explore/ (explore_lite) + map_merge/
 │   └── costmap_converter/      required dependency of teb_local_planner
 │
+├── .logs/                      runtime debug logs (mounted into every container as /ros2_ws/.logs)
 ├── docker-compose.yml
 ├── tb4sim.sh                   main launcher (build/run/logs/shell/watchdog/save_map)
 └── README.md
@@ -166,12 +177,43 @@ Every operator command from the CLI is routed through an `Event`: `CMD_GOTO`, `C
 | `full`  | `simulator` → `slam` → `navigation` → `task_manager`, `cli`   |
 | `rviz`  | `gazebo_gui` + `rviz` (host X, run alongside another profile) |
 
-Startup order relies on `depends_on: condition: service_healthy` — each service only starts once the previous one is healthy (e.g. `slam` waits for `simulator` to have `/scan`, `/tf`, and sim clock ≥ 5s before starting).
+Startup order relies on `depends_on: condition: service_healthy` — each service only starts once the previous one is healthy (e.g. `slam` waits for `simulator` to have `/scan`, `/tf` (via `tf2_echo odom base_link`, not a random `/tf` sample), and sim clock ≥ 5s before starting).
 
 **Rendering modes:**
-* `simulator`: runs headless inside Xvfb (`DISPLAY=:99`) + **VirtualGL** (`vglrun`, `egl0` backend) to use the real NVIDIA GPU for the Gazebo server + camera sensors (the OAK-D camera still spawns an OGRE render thread even with `-s`).
+* `simulator`: headless inside Xvfb (`DISPLAY=:99`). By default runs **VirtualGL** (`USE_VIRTUALGL=true`, `vglrun`, `egl0` backend) to use the real NVIDIA GPU for the Gazebo server + camera sensors (the OAK-D camera still spawns an OGRE render thread even with `-s`). `vgl_launch.sh` probes `vglrun glxinfo` before launch and automatically falls back to `LIBGL_ALWAYS_SOFTWARE=1` (software rendering) if the EGL/GLX context can't be created. Set `USE_VIRTUALGL=false` to force the CPU path directly — `vgl_launch.sh` then explicitly exports `LIBGL_ALWAYS_SOFTWARE=1` + `GALLIUM_DRIVER=llvmpipe` so Mesa never silently falls back to *indirect* GLX over the X11 socket (indirect GLX serializes every GL call and used to tank real-time factor by 100-1000x).
 * `slam` / `navigation` / `task_manager` / `cli`: fully headless, **do not** start Xvfb (`START_XVFB=false`).
-* `gazebo_gui` / `rviz`: use the **real host X server** (`DISPLAY` from the host, `xhost +local:docker`), no Xvfb spawned. **Do not run `gazebo_gui` and `rviz` at the same time** on a 4GB GPU — just use `./tb4sim.sh rviz` (Gazebo keeps running headless on the server, no GUI client needed).
+* `gazebo_gui` / `rviz`: use the **real host X server** (`DISPLAY` from the host, `xhost +local:docker`), no Xvfb spawned. **Do not run `gazebo_gui` and `rviz` at the same time** on a 4GB GPU — just use `./tb4sim.sh rviz` (Gazebo keeps running headless on the server, no GUI client needed). `rviz` loads the custom `config/rviz/tb4_view.rviz` layout (edit it on the host — the file is bind-mounted, no rebuild needed).
+
+---
+
+## Performance Tuning
+
+Everything below is override-able via `.env` or an exported shell variable before `./tb4sim.sh ...`:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ROS_LOG_LEVEL` | `WARN` | rclcpp/rclpy logging threshold. Every node logging at `INFO` across Gazebo/SLAM/Nav2/bridges adds up to real CPU cost — only raise it when actively debugging. |
+| `USE_VIRTUALGL` | `true` | `true` = GPU render through VirtualGL/EGL; `false` = forced CPU/`llvmpipe` (see rendering modes above). |
+| `RENDER_ENGINE` | `ogre` | Gazebo render engine. `ogre` (Ogre1) is much lighter under CPU/Xvfb rendering; switch to `ogre2` only once `USE_VIRTUALGL=true` and the GPU/EGL path is confirmed stable. |
+| `XVFB_RESOLUTION` | `960x540x24` | Virtual framebuffer size — nobody views it directly, so it's kept small to cut OGRE's per-frame cost. |
+| `SIM_CPU_LIMIT` | `12` | CPU core cap for the `simulator` service (heaviest). |
+| `SLAM_CPU_LIMIT` | `3` | CPU core cap for `slam`. |
+| `NAV_CPU_LIMIT` | `4` | CPU core cap for `navigation`. |
+
+Adjust the `*_CPU_LIMIT` values to match `nproc` on your machine. `deploy.resources.limits` requires **Docker Compose v2** (`docker compose`, not the legacy `docker-compose` v1 binary) to take effect outside Swarm mode — check with `docker compose version`.
+
+### Chasing a low real-time factor (RTF)
+
+If `simulator` reports a real-time factor well below 1.0 (symptoms: `cmd_vel` feels laggy, SLAM/Nav2 fall behind), the fixes already baked into this repo, roughly in the order they matter:
+
+1. **Indirect GLX fallback** — `vgl_launch.sh` now forces `LIBGL_ALWAYS_SOFTWARE=1` explicitly on the CPU path. Without it, Mesa can silently negotiate *indirect* GLX against Xvfb (no real DRI device inside the virtual X server) and serialize every GL call over the X11 socket — CPU usage looks low precisely because most time is spent waiting on round-trips, not computing. This was the single biggest RTF killer (dropped RTF to ~0.04 before the fix).
+2. **Cliff + IR intensity sensors** — the Create3 base ships 4 cliff sensors + 7 IR intensity sensors, all raycasting at their real-hardware rate of 62 Hz. Under `llvmpipe` (CPU rendering), 11 extra raycast sensors competing for the same render context is expensive and isn't needed by any of Nav2/SLAM/task_manager. `docker/Dockerfile.sim` patches both xacro files to drop their `update_rate` to 5 Hz (RPLIDAR is left untouched — Nav2/SLAM need its full rate).
+3. **DWB debug output** — `debug_trajectory_details: true` makes the DWA controller serialize every candidate trajectory (vx × vtheta samples) to a debug topic each cycle. Now `false` by default.
+4. **DWB trajectory sample count** — `vx_samples`/`vtheta_samples` reduced `20×20 → 10×10` (400 → 100 candidates/cycle), still smooth enough for a low-speed differential robot (`max_vel_x: 0.31`).
+5. **SmacPlannerHybrid** — costmap downsampling enabled (`downsample_costmap: true`, factor 2), `angle_quantization_bins` halved (72 → 36), `max_iterations`/`max_on_approach_iterations` lowered to sane ceilings, and `cache_obstacle_heuristic: true` (the heuristic map is now computed once and reused instead of recomputed on every replan).
+6. **Path smoothers** (`SmacPlannerHybrid.smoother` and `smoother_server.simple_smoother`) — `tolerance` relaxed from `1e-10` (which almost never converges early) to `1e-6`, and `max_iterations`/`max_its` lowered from 1000 to 200 to match.
+
+If RTF is still low after all of the above, check `ros2 topic hz /scan` and `docker stats` while the stack is running — that will show whether the LiDAR raycast itself (dense warehouse mesh + `llvmpipe`) or another sensor/node is now the bottleneck.
 
 ---
 
@@ -183,7 +225,7 @@ Startup order relies on `depends_on: condition: service_healthy` — each servic
 | ----------------------- | --------------------- | ---------------------------------------------------------- |
 | `/tb4/cmd`              | CLI → task_manager     | Operator commands (`goto:wp:algo`, `patrol:algo`, `explore:algo`, `stop`, `pause`, `resume`) |
 | `/tb4/status`           | task_manager → CLI      | 1Hz heartbeat: state + mission summary + battery           |
-| `/controller_selector`  | task_manager → Nav2     | Runtime controller plugin selection (`FollowPathDWA`/`TEB`/`PP`) |
+| `/controller_selector`  | task_manager → Nav2 BT  | Runtime controller plugin selection (`FollowPathDWA`/`TEB`/`PP`), latched (`TRANSIENT_LOCAL`), published by both `NavigationManager` and `ExploreManager` |
 | `/explore/resume`       | task_manager → explore_lite | Toggle frontier search on/off (pause doesn't kill the process) |
 | `/scan`                 | —                      | LiDAR                                                       |
 | `/odom`, `/tf`          | —                      | Odometry / transforms                                      |
@@ -203,7 +245,6 @@ Startup order relies on `depends_on: condition: service_healthy` — each servic
 | ----------------------------------------------- | --------------------- |
 | `/local_costmap/clear_entirely_local_costmap`   | RecoveryManager        |
 | `/global_costmap/clear_entirely_global_costmap` | RecoveryManager        |
-| `/explore_node/set_parameters`                  | ExploreManager (changes `controller_id` at runtime) |
 
 ---
 
@@ -343,9 +384,9 @@ docker restart tb4_task_manager
 | ------------------ | -------------------------------------------------- |
 | ROS2               | Humble (base image `osrf/ros:humble-desktop-full`) |
 | Simulator          | Ignition Gazebo Fortress (`ros-gz`, gz_version 6)   |
-| Headless rendering | Xvfb + VirtualGL (`vglrun`, EGL backend)             |
+| Headless rendering | Xvfb + VirtualGL (`vglrun`, EGL backend) with hardened `llvmpipe` fallback |
 | Navigation         | Nav2 (multi-plugin controller_server: DWA/TEB/PP)    |
-| Global planner     | Smac Planner Hybrid                                  |
+| Global planner     | Smac Planner Hybrid (downsampled costmap, cached obstacle heuristic) |
 | SLAM               | slam_toolbox (online_async)                          |
 | Exploration        | m-explore-ros2 (`explore_lite`)                      |
 | DDS                | CycloneDDS (`rmw_cyclonedds_cpp`)                     |
@@ -384,10 +425,25 @@ xhost +local:docker
 
 **Simulator stuck unhealthy / hangs during `start_period`**
 
-The healthcheck requires `/scan` + `/tf` (odom) + sim clock ≥ 5s + scan with more than 50 range points — usually because the world (warehouse) hasn't finished spawning yet. Check:
+The healthcheck requires `/scan` + `/tf` (odom→base_link via `tf2_echo`) + sim clock ≥ 5s + scan with more than 50 range points — usually because the world (warehouse) hasn't finished spawning yet. Check:
 
 ```bash
 ./tb4sim.sh logs simulator
+```
+
+**Low real-time factor / robot feels laggy**
+
+See [Performance Tuning](#performance-tuning) above. Quick checks:
+
+```bash
+docker stats                                   # is a service pinned at its CPU limit?
+ros2 topic hz /scan                            # is LiDAR publishing at the expected rate?
+```
+
+Confirm `USE_VIRTUALGL`/`RENDER_ENGINE` currently in effect for the running container:
+
+```bash
+docker exec tb4_simulator printenv USE_VIRTUALGL RENDER_ENGINE
 ```
 
 **Nav2 errors**
@@ -419,15 +475,16 @@ docker exec -it tb4_navigation printenv RMW_IMPLEMENTATION
 
 ## Roadmap
 
-* ✓ Docker deployment (multi-profile, dependency-ordered healthchecks)
+* ✓ Docker deployment (multi-profile, dependency-ordered healthchecks, per-service CPU limits)
 * ✓ Nav2 navigation, multiple runtime controllers (DWA/TEB/PP)
 * ✓ SLAM mapping
 * ✓ Waypoint patrol + task execution at each waypoint
 * ✓ Recovery behaviors (6 levels)
 * ✓ Battery monitoring + auto-dock/charge
-* ✓ Frontier exploration (explore_lite) + controller sync
+* ✓ Frontier exploration (explore_lite) + controller sync via shared `/controller_selector` topic
 * ✓ Unit testing (managers + state machine)
-* ✓ Headless GPU rendering (Xvfb + VirtualGL)
+* ✓ Headless GPU rendering (Xvfb + VirtualGL) with hardened CPU/`llvmpipe` fallback
+* ✓ Real-time factor tuning (sensor update rates, DWB/Smac planner cost cuts, latched controller-selector QoS)
 * ✘ `nav2_stanley_controller` — build it and re-enable `FollowPathStanley`
 * ✘ Multi-robot support / fleet management
 * ✘ Camera perception (OAK-D pipeline)
