@@ -20,7 +20,7 @@ A full **TurtleBot4** simulation stack on **ROS2 Humble**, running via **Docker 
 * Unit tests for all managers + the state machine (pytest)
 
 ---
-[![Watch demo on youtube](https://youtube.com)](https://www.youtube.com/watch?v=bq-OAB5vu88)
+[![Watch demo on youtube](image/recording.gif)](https://youtube.com)](https://www.youtube.com/watch?v=bq-OAB5vu88)
 
 
 
