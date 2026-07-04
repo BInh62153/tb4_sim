@@ -20,9 +20,9 @@ A full **TurtleBot4** simulation stack on **ROS2 Humble**, running via **Docker 
 * Unit tests for all managers + the state machine (pytest)
 
 ---
-![Watch demo](image/recording.gif)
+![Watch demo](images/recording.gif)
 
-▶[Xem video đầy đủ trên YouTube](https://www.youtube.com/watch?v=bq-OAB5vu88)
+▶ [Watch the full video on YouTube](https://www.youtube.com/watch?v=bq-OAB5vu88)
 
 
 ## System Overview
