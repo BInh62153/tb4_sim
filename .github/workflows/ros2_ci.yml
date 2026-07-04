@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4   # task_manager không phải submodule -> không cần submodules: recursive
 
       - uses: actions/setup-python@v5
         with:
@@ -47,7 +47,14 @@ jobs:
       image: osrf/ros:humble-desktop-full
 
     steps:
+      # FIX: teb_local_planner, m-explore-ros2, costmap_converter là git submodule
+      # (gitlink 160000 trong index). Không có submodules: recursive thì checkout
+      # để lại 3 thư mục rỗng -> colcon build không thấy package (thiếu CMakeLists.txt/package.xml).
+      # LƯU Ý: repo hiện thiếu file .gitmodules -> nếu submodule chưa có URL khai báo,
+      # bước init này sẽ không fetch được gì. Cần bổ sung/khôi phục .gitmodules trước.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Setup workspace
         run: |
@@ -61,6 +68,9 @@ jobs:
             python3-rosdep \
             python3-colcon-common-extensions
 
+          # FIX: rosdep init trước update (image osrf/ros đôi khi chưa init sẵn;
+          # init lần 2 sẽ báo "already exists" nên bỏ qua lỗi bằng "|| true")
+          rosdep init || true
           rosdep update
           rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y
 
@@ -80,7 +90,12 @@ jobs:
       image: osrf/ros:humble-desktop-full
 
     steps:
+      # FIX: job này chạy trên container riêng (không needs rosdep từ job build),
+      # nên cũng cần submodules: recursive giống job build, nếu không
+      # teb_local_planner/m-explore-ros2/costmap_converter sẽ rỗng.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Install simulation deps
         run: |
@@ -89,6 +104,8 @@ jobs:
             ros-humble-turtlebot4-simulator \
             ros-humble-nav2-bringup \
             ros-humble-slam-toolbox \
+            python3-rosdep \
+            python3-colcon-common-extensions \
             xvfb
 
       - name: Start virtual display
@@ -101,6 +118,14 @@ jobs:
           source /opt/ros/$ROS_DISTRO/setup.bash
           mkdir -p $WORKSPACE/src
           cp -r src/* $WORKSPACE/src/
+
+          # FIX: job build system deps riêng (rosdep chưa từng chạy trong job này),
+          # thiếu bước này thì teb_local_planner (cần libg2o-dev, libsuitesparse-dev)
+          # và các package khác sẽ fail ở bước cmake/configure.
+          rosdep init || true
+          rosdep update
+          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y
+
           cd $WORKSPACE
           colcon build
 
@@ -109,12 +134,18 @@ jobs:
           source /opt/ros/$ROS_DISTRO/setup.bash
           source $WORKSPACE/install/setup.bash
 
-          ros2 launch scripts turtlebot4_headless.launch.py &
+          # FIX: "scripts" không phải tên package ROS2 (launch file này nằm ở
+          # thư mục scripts/ tại repo root, không thuộc src/ nên không được copy
+          # vào $WORKSPACE, và cũng không có package.xml để ros2 launch resolve).
+          # Gọi trực tiếp bằng đường dẫn file, giống cách docker-compose.yml đang dùng
+          # ("ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py").
+          ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" &
           sleep 25
 
       - name: Verify system
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
+          source $WORKSPACE/install/setup.bash
 
           echo "=== Topics ==="
           ros2 topic list
@@ -123,6 +154,10 @@ jobs:
           ros2 action list | grep navigate_to_pose || exit 1
 
           echo "=== Check cmd_vel ==="
-          ros2 topic echo /cmd_vel --once || exit 1
+          # FIX: "ros2 topic echo --once" sẽ treo vô thời hạn nếu chưa từng có
+          # message nào publish trên /cmd_vel (robot chưa di chuyển) -> job hang
+          # tới khi hết timeout của GitHub Actions (rất lâu, tốn phút chạy CI).
+          # Bọc timeout ngắn để fail nhanh, có thông báo rõ ràng thay vì hang.
+          timeout 15 ros2 topic echo /cmd_vel --once || { echo "No /cmd_vel message within 15s"; exit 1; }
 
           echo "CI PASS"
