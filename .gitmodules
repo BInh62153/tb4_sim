@@ -10,5 +10,5 @@
 
 [submodule "src/costmap_converter"]
 	path = src/costmap_converter
-	url = https://github.com/rst-tu-dortmund/costmap_converter.git
+	url = https://github.com/BInh62153/costmap_converter.git
 	branch = ros2
