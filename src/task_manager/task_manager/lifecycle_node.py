@@ -306,13 +306,26 @@ class TurtleBot4LifecycleNode(LifecycleNode):
     # ── Operator command events ─────────────────────────────────────────────
 
     def _on_cmd_patrol(self, algo: str = "dwa", **_):
-        if self._sm.is_in(SystemState.IDLE, SystemState.PAUSED, SystemState.EXPLORING):
-            self._explore_mgr.stop()
-            self._current_algo = algo
-            self._mission_mode = 'patrol'
-            self._pending_goto = None
-            self._sm.force_transition(SystemState.IDLE, "cmd_patrol")
-            self._cycle()
+        # FIX: trước đây chỉ chấp nhận từ IDLE/PAUSED/EXPLORING và KHÔNG log
+        # gì khi bị từ chối -> nếu đang NAVIGATING/EXECUTING_TASK/RECOVERING
+        # (rất dễ xảy ra ngay sau khi test goto/explore) thì patrol bị âm
+        # thầm bỏ qua, trông như "không hoạt động". Giờ patrol preempt mọi
+        # hoạt động đang chạy giống cách 'goto' làm, chỉ chặn khi thực sự
+        # không an toàn (đang sạc / đã abort).
+        if self._sm.is_in(SystemState.LOW_BATTERY_DOCKING, SystemState.CHARGING,
+                           SystemState.RESUME_AFTER_CHARGE, SystemState.ABORTED):
+            self.get_logger().warn(
+                f"[CMD] patrol: bỏ qua vì đang ở state {self._sm.state.name}"
+            )
+            return
+        self._explore_mgr.stop()
+        self._nav_mgr.cancel()
+        self._executor.cancel()
+        self._current_algo = algo
+        self._mission_mode = 'patrol'
+        self._pending_goto = None
+        self._sm.force_transition(SystemState.IDLE, "cmd_patrol")
+        self._cycle()
 
     def _on_cmd_pause(self, **_):
         if self._sm.is_in(SystemState.EXPLORING):

@@ -33,6 +33,8 @@ Inject:
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess
 from typing import Optional
 
@@ -71,6 +73,11 @@ class ExploreManager:
         self._proc: Optional[subprocess.Popen] = None
         self._exploring = False   # đang active tìm frontier (chưa pause)
         self._current_algo = 'dwa'
+        # FIX: tiến trình chờ SIGKILL sau grace period (nếu SIGTERM không đủ)
+        # + timer tương ứng — quản lý tách khỏi self._proc để stop() có thể
+        # trả về ngay lập tức, không block executor.
+        self._pending_kill_proc: Optional[subprocess.Popen] = None
+        self._kill_timer = None
 
         self._resume_pub = node.create_publisher(Bool, '/explore/resume', 10)
         self._controller_selector_pub = node.create_publisher(
@@ -109,19 +116,55 @@ class ExploreManager:
             self._slog.info("explore_pause")
 
     def stop(self):
-        """Dừng hẳn explore_lite (lệnh 'stop' hoặc chuyển sang patrol/goto)."""
+        """Dừng hẳn explore_lite (lệnh 'stop' hoặc chuyển sang patrol/goto).
+
+        FIX: bản cũ gọi self._proc.wait(timeout=5.0) — BLOCKING call ngay
+        trong callback /tb4/cmd của executor đơn luồng (rclpy.spin mặc
+        định). Trong tối đa 5s đó node không xử lý được BẤT KỲ callback
+        nào khác: heartbeat ngưng, service lifecycle get/set (dùng bởi CLI
+        'status'/'activate'/'deactivate') bị treo, và lệnh /tb4/cmd tiếp
+        theo (vd 'goto' gửi ngay sau khi tắt explore) bị xếp hàng chờ —
+        đây là nguyên nhân "status không hoạt động", "activate/deactivate
+        không hoạt động đúng sau explore". Ngoài ra 'ros2 launch' chỉ là
+        tiến trình cha bọc explore_lite thật; SIGTERM cho riêng cha không
+        đảm bảo con dừng kịp, nên explore_lite có thể kịp gửi thêm 1 goal
+        frontier mới ngay khi bạn vừa gửi 'goto' — hai goal đá nhau.
+        Bản mới: gửi SIGTERM cho CẢ process group ngay lập tức, không đợi,
+        cập nhật is_running() = False tức thì, và chỉ SIGKILL cưỡng bức sau
+        1.5s (qua timer không-block) nếu tiến trình vẫn còn sống.
+        """
         if self._proc is None:
             self._exploring = False
             return
         self._slog.info("explore_stop")
-        try:
-            self._proc.terminate()
-            self._proc.wait(timeout=5.0)
-        except Exception as exc:
-            self._slog.warn("explore_stop_force_kill", error=str(exc))
-            self._proc.kill()
+        proc = self._proc
         self._proc = None
         self._exploring = False
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+        if self._kill_timer:
+            self._kill_timer.cancel()
+            self._node.destroy_timer(self._kill_timer)
+            self._kill_timer = None
+        self._pending_kill_proc = proc
+        self._kill_timer = self._node.create_timer(1.5, self._force_kill_if_alive)
+
+    def _force_kill_if_alive(self):
+        if self._kill_timer:
+            self._kill_timer.cancel()
+            self._node.destroy_timer(self._kill_timer)
+            self._kill_timer = None
+        proc = self._pending_kill_proc
+        self._pending_kill_proc = None
+        if proc is not None and proc.poll() is None:
+            self._slog.warn("explore_stop_force_kill")
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
 
     def set_algo(self, algo: str):
         """Đổi thuật toán lái khi đang explore, không cần restart tiến trình."""
@@ -140,6 +183,11 @@ class ExploreManager:
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            # FIX: đặt tiến trình con vào process group riêng (setsid) để
+            # stop() có thể os.killpg() diệt cả 'ros2 launch' LẪN tiến
+            # trình explore_lite thật mà nó fork ra — SIGTERM cho riêng
+            # PID cha (mặc định trước đây) không đảm bảo con bị dừng theo.
+            preexec_fn=os.setsid,
         )
 
     def _publish_resume(self, resume: bool):

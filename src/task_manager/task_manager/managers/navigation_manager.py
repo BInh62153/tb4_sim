@@ -64,6 +64,13 @@ class NavigationManager:
         self._controller_selector_pub = node.create_publisher(
             String, '/controller_selector', _SELECTOR_QOS
         )
+        # FIX: đánh dấu khi operator chủ động cancel (stop/pause/preempt) để
+        # phân biệt với thất bại thật sự. Nếu không có cờ này, mọi cancel()
+        # đều khiến _on_result() trả success=False -> dispatch NAV_FAILED ->
+        # trigger toàn bộ recovery pipeline (spin 90°, backup 0.2m...) NGAY
+        # CẢ KHI người dùng chỉ muốn dừng — đây là lý do 'stop' "không dừng
+        # được" trong khi goto: robot vẫn tiếp tục quay/lùi vài giây sau.
+        self._cancel_requested = False
 
     # ── Server readiness ───────────────────────────────────────────────────
 
@@ -129,6 +136,7 @@ class NavigationManager:
 
     def cancel(self):
         if self._current_goal_handle is not None:
+            self._cancel_requested = True
             self._current_goal_handle.cancel_goal_async()
             self._current_goal_handle = None
             self._slog.info("nav_goal_cancelled")
@@ -175,7 +183,19 @@ class NavigationManager:
             round(time.monotonic() - self._nav_start_time, 2)
             if self._nav_start_time else -1
         )
-        result  = future.result()
+        result = future.result()
+
+        # FIX: nếu goal bị CANCELED do chính operator (stop/pause/goto mới
+        # đè lên) thì KHÔNG dispatch on_done() -> không trigger NAV_FAILED
+        # -> không chạy recovery (spin/backup). Trước đây mọi cancel đều
+        # rơi vào nhánh success=False như một lỗi thật, khiến robot tự
+        # quay/lùi ngay sau khi người dùng bấm 'stop'.
+        if result.status == GoalStatus.STATUS_CANCELED and self._cancel_requested:
+            self._cancel_requested = False
+            self._slog.info("nav_goal_canceled_by_operator", goal_id=goal_id)
+            return
+
+        self._cancel_requested = False
         success = result.status == GoalStatus.STATUS_SUCCEEDED
         self._slog.info(
             "nav_goal_result",

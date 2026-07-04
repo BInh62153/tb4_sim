@@ -31,6 +31,15 @@ class TaskExecutor:
         self._on_complete: Optional[Callable] = None
         self._timer       = None
         self._start_time: Optional[float] = None
+        # FIX: cancel() trước đây chỉ hủy timer 'wait', không hủy goal Spin
+        # (task 'rotate') đang chạy -> 'stop'/'pause' trong lúc robot đang
+        # quay (rotate task) không có tác dụng, robot vẫn quay hết vòng.
+        self._spin_goal_handle = None
+        # FIX: nếu không có cờ này, khi cancel() hủy 1 goal Spin đang chạy,
+        # kết quả CANCELED của Spin vẫn về sau đó và _on_spin_result() sẽ
+        # gọi _advance() -> tự động chạy tiếp task kế tiếp trong danh sách,
+        # dù toàn bộ task list đáng lẽ phải dừng hẳn khi có lệnh stop/pause.
+        self._cancelled = False
 
     # ── Public API ──────────────────────────────────────────────────────────
 
@@ -39,6 +48,7 @@ class TaskExecutor:
         self._tasks      = tasks
         self._idx        = 0
         self._on_complete = on_complete
+        self._cancelled   = False
         self._start_time = time.monotonic()
         self._slog.info(
             "tasks_start",
@@ -48,10 +58,14 @@ class TaskExecutor:
         self._run_next()
 
     def cancel(self):
+        self._cancelled = True
         if self._timer:
             self._timer.cancel()
             self._node.destroy_timer(self._timer)
             self._timer = None
+        if self._spin_goal_handle is not None:
+            self._spin_goal_handle.cancel_goal_async()
+            self._spin_goal_handle = None
 
     # ── Private ─────────────────────────────────────────────────────────────
 
@@ -118,7 +132,14 @@ class TaskExecutor:
         if not handle.accepted:
             self._advance()
             return
-        handle.get_result_async().add_done_callback(lambda _: self._advance())
+        self._spin_goal_handle = handle
+        handle.get_result_async().add_done_callback(self._on_spin_result)
+
+    def _on_spin_result(self, _future):
+        self._spin_goal_handle = None
+        if self._cancelled:
+            return
+        self._advance()
 
     def _advance(self):
         self._idx += 1

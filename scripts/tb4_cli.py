@@ -135,11 +135,16 @@ class TB4CLI(Node):
         msg.data = text
         self.pub.publish(msg)
 
+    
     def refresh_heartbeat(self, timeout_sec: float = 1.2):
-        """Spin ngắn để nhận heartbeat mới nhất từ /tb4/status."""
-        deadline = time.monotonic() + timeout_sec
-        while time.monotonic() < deadline:
-            rclpy.spin_once(self, timeout_sec=0.1)
+        """Đợi cập nhật heartbeat mà không gây xung đột spin_once.
+           Chờ đợi cập nhật heartbeat từ /tb4/status thông qua background thread"""
+        # Chỉ cần chờ đợi một khoảng thời gian để luồng background tự xử lý callback
+        # Thay vì gọi spin_once ở đây, ta dùng time.sleep để đợi luồng kia nhận tin nhắn
+        start_time = time.time()
+        while time.time() - start_time < timeout_sec:
+            time.sleep(0.1) # Nghỉ 0.1s để CPU không bị chiếm dụng
+            # Không gọi spin_once ở đây nữa
 
 def format_status(node: TB4CLI) -> str:
     lines: list[str] = []
