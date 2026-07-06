@@ -66,7 +66,9 @@ jobs:
           apt-get update
           apt-get install -y \
             python3-rosdep \
-            python3-colcon-common-extensions
+            python3-colcon-common-extensions \
+            libsuitesparse-dev \
+            libeigen3-dev
 
           # FIX: rosdep init trước update (image osrf/ros đôi khi chưa init sẵn;
           # init lần 2 sẽ báo "already exists" nên bỏ qua lỗi bằng "|| true")
@@ -74,12 +76,12 @@ jobs:
           rosdep update
           rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y
 
-      - name: Build
-        shell: bash
-        run: |
-          source /opt/ros/$ROS_DISTRO/setup.bash
-          cd $WORKSPACE
-          colcon build
+            - name: Build
+              shell: bash
+              run: |
+                source /opt/ros/$ROS_DISTRO/setup.bash
+                cd $WORKSPACE
+                colcon build
 
 # ═══════════════════════════════════════
 # 3. SIMULATION TEST (KEY PART)
