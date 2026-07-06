@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4   # task_manager không phải submodule -> không cần submodules: recursive
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
@@ -47,7 +47,6 @@ jobs:
       image: osrf/ros:humble-desktop-full
 
     steps:
-      # FIX: teb_local_planner, m-explore-ros2, costmap_converter là git submodule
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -56,6 +55,19 @@ jobs:
         run: |
           mkdir -p $WORKSPACE/src
           cp -r src/* $WORKSPACE/src/
+
+      # teb_local_planner (submodule) build từ source yêu cầu header Ceres cũ
+      # (ceres/internal/fixed_array.h) mà libceres-dev trên Ubuntu jammy (Ceres 2.1)
+      # không còn cung cấp -> conflict với ros-humble-libg2o. Tạm skip build.
+      # LƯU Ý QUAN TRỌNG: config/nav2/nav2_params.yaml khai báo controller_plugins
+      # gồm cả "FollowPathTEB" (dùng teb_local_planner::TebLocalPlannerROS).
+      # Nếu package này không build, controller_server sẽ crash lúc configure vì
+      # thiếu pluginlib class -> job `simulation` dùng bản params.yaml đã patch
+      # bỏ FollowPathTEB riêng cho CI (xem step "Patch nav2 params for CI").
+      # TODO dài hạn: build Ceres 1.14.x từ source để khôi phục teb_local_planner.
+      - name: Temporarily skip teb_local_planner (Ceres version conflict)
+        run: |
+          touch $WORKSPACE/src/teb_local_planner/teb_local_planner/COLCON_IGNORE
 
       - name: Install dependencies
         run: |
@@ -66,11 +78,11 @@ jobs:
             libsuitesparse-dev \
             libeigen3-dev
 
-          # rosdep init may already be done inside the container; ignore errors
+      - name: Init & rosdep
+        run: |
           rosdep init || true
           rosdep update
-          # skip the problematic rosdep key if it is not present in rosdep DB
-          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y --skip-keys="libsuitesparse-dev"
+          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y --skip-keys="libsuitesparse-dev,ament_python"
 
       - name: Build
         shell: bash
@@ -79,9 +91,25 @@ jobs:
           cd $WORKSPACE
           colcon build
 
+      - name: Archive built workspace
+        shell: bash
+        run: |
+          cd $WORKSPACE
+          tar -czf /tmp/ws_build.tar.gz install build src
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ros2-workspace
+          path: /tmp/ws_build.tar.gz
+          retention-days: 1
+
   # ═══════════════════════════════════════
   # 3. SIMULATION TEST (KEY PART)
   # ═══════════════════════════════════════
+  # Mô phỏng lại đúng chuỗi khởi động của docker-compose.yml thật:
+  # simulator (Gazebo) -> slam (slam_toolbox) -> navigation (Nav2 bringup)
+  # thay vì chỉ chạy turtlebot4_headless.launch.py (chỉ start Gazebo, KHÔNG
+  # có Nav2 -> mọi check navigate_to_pose trước đây luôn fail).
   simulation:
     needs: build
     runs-on: ubuntu-latest
@@ -100,39 +128,125 @@ jobs:
             ros-humble-turtlebot4-simulator \
             ros-humble-nav2-bringup \
             ros-humble-slam-toolbox \
-            python3-rosdep \
-            python3-colcon-common-extensions \
-            xvfb \
-            libsuitesparse-dev \
-            libeigen3-dev
+            ros-humble-rmw-cyclonedds-cpp \
+            xvfb
 
       - name: Start virtual display
         run: |
-          Xvfb :99 -screen 0 1280x1024x24 &
+          Xvfb :99 -screen 0 960x540x24 &
           echo "DISPLAY=:99" >> $GITHUB_ENV
+          # CI không có GPU/EGL -> ép llvmpipe direct rendering, giống hệt
+          # nhánh USE_VIRTUALGL=false trong scripts/vgl_launch.sh
+          echo "LIBGL_ALWAYS_SOFTWARE=1" >> $GITHUB_ENV
+          echo "GALLIUM_DRIVER=llvmpipe" >> $GITHUB_ENV
 
-      - name: Build workspace
+      - name: Set DDS env (match docker-compose x-ros-env)
+        run: |
+          echo "ROS_DOMAIN_ID=0" >> $GITHUB_ENV
+          echo "RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> $GITHUB_ENV
+          echo "CYCLONEDDS_URI=file://${GITHUB_WORKSPACE}/config/cyclonedds/cyclonedds.xml" >> $GITHUB_ENV
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: ros2-workspace
+          path: /tmp
+
+      - name: Restore workspace
         shell: bash
         run: |
-          source /opt/ros/$ROS_DISTRO/setup.bash
-          mkdir -p $WORKSPACE/src
-          cp -r src/* $WORKSPACE/src/
+          mkdir -p $WORKSPACE
+          tar -xzf /tmp/ws_build.tar.gz -C $WORKSPACE
+          # phòng trường hợp artifact cũ (build trước khi có fix) còn sót binary
+          find $WORKSPACE/install -maxdepth 1 -iname "teb_local_planner*" -exec rm -rf {} + || true
 
-          rosdep init || true
-          rosdep update
-          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y --skip-keys="libsuitesparse-dev"
+      - name: Patch nav2 params for CI (drop FollowPathTEB)
+        run: |
+          mkdir -p /tmp/ci_config
+          # teb_local_planner không được build trong CI (xem job build) -> nếu giữ
+          # nguyên controller_plugins gốc, controller_server sẽ crash lúc configure
+          # vì thiếu pluginlib class "teb_local_planner::TebLocalPlannerROS".
+          # Bản patch này chỉ dùng nội bộ cho CI, KHÔNG ghi đè config gốc của repo.
+          sed 's/controller_plugins: \["FollowPathDWA", "FollowPathTEB", "FollowPathPP"\]/controller_plugins: ["FollowPathDWA", "FollowPathPP"]/' \
+            "${GITHUB_WORKSPACE}/config/nav2/nav2_params.yaml" > /tmp/ci_config/nav2_params_ci.yaml
+          grep -q '"FollowPathTEB"' /tmp/ci_config/nav2_params_ci.yaml && \
+            { echo "ERROR: sed pattern không khớp, kiểm tra lại nav2_params.yaml gốc"; exit 1; } || true
 
-          cd $WORKSPACE
-          colcon build
-
-      - name: Launch TB4 headless
+      - name: Launch simulator (Gazebo)
         shell: bash
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
           source $WORKSPACE/install/setup.bash
 
-          ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" &
-          sleep 25
+          ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" \
+            model:=lite world:=warehouse render_engine:=ogre &
+          echo $! > /tmp/sim_pid
+
+          echo "=== Waiting for simulator ready (max 180s): /scan + tf odom->base_link ==="
+          elapsed=0
+          until ros2 topic list 2>/dev/null | grep -q /scan \
+              && timeout 5 ros2 run tf2_ros tf2_echo odom base_link 2>/dev/null | grep -q Translation; do
+            if ! kill -0 "$(cat /tmp/sim_pid)" 2>/dev/null; then
+              echo "Simulator process died during startup"; exit 1
+            fi
+            elapsed=$((elapsed + 5))
+            if [ "$elapsed" -ge 180 ]; then
+              echo "Timed out waiting for simulator readiness"; exit 1
+            fi
+            sleep 5
+          done
+          echo "Simulator ready after ${elapsed}s"
+
+      - name: Launch SLAM
+        shell: bash
+        run: |
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          source $WORKSPACE/install/setup.bash
+
+          ros2 launch slam_toolbox online_async_launch.py \
+            slam_params_file:="${GITHUB_WORKSPACE}/config/slam/slam_toolbox_params.yaml" \
+            use_sim_time:=true &
+          echo $! > /tmp/slam_pid
+
+          echo "=== Waiting for SLAM ready (max 120s): /map + tf map frame ==="
+          elapsed=0
+          until ros2 topic list 2>/dev/null | grep -q /map \
+              && timeout 5 bash -lc 'ros2 topic echo /tf 2>/dev/null | grep -m1 -q "frame_id: map"'; do
+            if ! kill -0 "$(cat /tmp/slam_pid)" 2>/dev/null; then
+              echo "SLAM process died during startup"; exit 1
+            fi
+            elapsed=$((elapsed + 5))
+            if [ "$elapsed" -ge 120 ]; then
+              echo "Timed out waiting for SLAM readiness"; exit 1
+            fi
+            sleep 5
+          done
+          echo "SLAM ready after ${elapsed}s"
+
+      - name: Launch Nav2
+        shell: bash
+        run: |
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          source $WORKSPACE/install/setup.bash
+
+          ros2 launch nav2_bringup navigation_launch.py \
+            use_sim_time:=true \
+            params_file:=/tmp/ci_config/nav2_params_ci.yaml \
+            autostart:=true &
+          echo $! > /tmp/nav_pid
+
+          echo "=== Waiting for Nav2 ready (max 90s): /local_costmap/costmap ==="
+          elapsed=0
+          until ros2 topic list 2>/dev/null | grep -q /local_costmap/costmap; do
+            if ! kill -0 "$(cat /tmp/nav_pid)" 2>/dev/null; then
+              echo "Nav2 process died during startup"; exit 1
+            fi
+            elapsed=$((elapsed + 5))
+            if [ "$elapsed" -ge 90 ]; then
+              echo "Timed out waiting for Nav2 readiness"; exit 1
+            fi
+            sleep 5
+          done
+          echo "Nav2 ready after ${elapsed}s"
 
       - name: Verify system
         shell: bash
@@ -140,13 +254,26 @@ jobs:
           source /opt/ros/$ROS_DISTRO/setup.bash
           source $WORKSPACE/install/setup.bash
 
+          echo "=== Check all processes still alive ==="
+          for f in /tmp/sim_pid /tmp/slam_pid /tmp/nav_pid; do
+            kill -0 "$(cat "$f")" 2>/dev/null || { echo "Process from $f died"; exit 1; }
+
           echo "=== Topics ==="
           ros2 topic list
 
-          echo "=== Check Nav2 ==="
+          echo "=== Check Nav2 action server ==="
           ros2 action list | grep navigate_to_pose || exit 1
 
-          echo "=== Check cmd_vel ==="
-          timeout 15 ros2 topic echo /cmd_vel --once || { echo "No /cmd_vel message within 15s"; exit 1; }
+          # Dùng tọa độ waypoint "diem_A" thật từ config/waypoints.yaml (x=1.0, y=0.0)
+          # thay vì tọa độ tùy ý, để chắc chắn nằm trong khu vực world warehouse đã load.
+          echo "=== Sending goal (diem_A) to trigger motion ==="
+          ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+            "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}" \
+            --feedback &
+          GOAL_PID=$!
 
+          echo "=== Check cmd_vel ==="
+          timeout 30 ros2 topic echo /cmd_vel --once || { echo "No /cmd_vel message within 30s after goal sent"; kill $GOAL_PID 2>/dev/null; exit 1; }
+
+          kill $GOAL_PID 2>/dev/null || true
           echo "CI PASS"
