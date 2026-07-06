@@ -1,5 +1,10 @@
 # TurtleBot4 Simulation Stack (tb4_sim_v2)
 
+[![ROS2 CI](https://github.com/BInh62153/tb4_sim/actions/workflows/ros2_ci.yml/badge.svg)](https://github.com/BInh62153/tb4_sim/actions/workflows/ros2_ci.yml)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![ROS2](https://img.shields.io/badge/ROS2-Humble-blue)
+![Gazebo](https://img.shields.io/badge/Gazebo-Fortress-orange)
+
 A full **TurtleBot4** simulation stack on **ROS2 Humble**, running via **Docker Compose**, using **Ignition Gazebo (Fortress)** as the simulator. Includes SLAM, Nav2, multiple runtime-selectable controllers (DWA / TEB / Pure Pursuit), frontier exploration, an event-driven Task Manager lifecycle node, and an interactive CLI for controlling the robot.
 
 ---
