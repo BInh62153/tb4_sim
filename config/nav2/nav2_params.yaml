@@ -161,8 +161,6 @@ controller_server:
       short_circuit_trajectory_evaluation: true
       stateful: true
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      # FIXED: critic scales phải nằm BÊN TRONG FollowPath block, không phải ngoài controller_server.ros__parameters
-      # Khi đặt ngoài, DWB hoàn toàn bỏ qua các scale này → dùng default → navigation kém
       BaseObstacle.scale: 0.02
       GoalAlign.scale: 24.0
       GoalDist.scale: 24.0

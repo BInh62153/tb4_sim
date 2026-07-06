@@ -272,6 +272,8 @@ If RTF is still low after all of the above, check `ros2 topic hz /scan` and `doc
 
 ## Quick Start
 
+> **Not on Arch Linux?** See [Windows / WSL2 Setup](#windows--wsl2-setup) below for an equivalent path, then skip to [Build the image](#3-build-the-image).
+
 ### 1. Install Docker (Arch Linux)
 
 ```bash
@@ -292,6 +294,32 @@ Hyprland — add this to your config to run it automatically on login:
 ```text
 exec-once = xhost +local:docker
 ```
+
+---
+
+### Windows / WSL2 Setup
+
+This stack runs fine on Windows through **WSL2** — Docker Desktop's Linux containers run inside it. Steps below replace steps 1–2 above; everything from [Build the image](#3-build-the-image) onward is identical.
+
+**Requirements**
+
+* **Windows 11** (or Windows 10 build ≥ 19044 with WSLg updates) — gives you **WSLg**, so Linux GUI apps (RViz, Gazebo GUI) display directly on the Windows desktop. No VcXsrv/Xming/XQuartz needed, and **no `xhost +local:docker`** — that command is Linux-host-only and can be skipped entirely.
+* **WSL2** enabled, with a Linux distro installed (Ubuntu recommended):
+  ```powershell
+  wsl --install -d Ubuntu
+  ```
+* **Docker Desktop for Windows**, with *Settings → General → "Use the WSL 2 based engine"* enabled, and *Settings → Resources → WSL Integration* turned on for your Ubuntu distro.
+* **GPU (optional):** if you have an NVIDIA GPU and want `USE_VIRTUALGL=true`, just install the latest **NVIDIA Windows driver** (it already includes WSL2 GPU passthrough — do not install a separate Linux driver inside WSL). Without an NVIDIA GPU, set `USE_VIRTUALGL=false` to use the CPU/`llvmpipe` fallback this project already supports.
+
+**Running the project**
+
+1. Open the **Ubuntu (WSL)** terminal app — not PowerShell or CMD. All `tb4sim.sh` commands are bash and must run inside WSL.
+2. Clone/copy the repo inside the WSL filesystem (e.g. `~/tb4_sim_v2`, not `/mnt/c/...`) for much better Docker volume performance.
+3. Continue with [Build the image](#3-build-the-image) below, run entirely from that Ubuntu (WSL) terminal.
+
+> ⚠️ Common pitfall: double-clicking `tb4sim.sh` or running it from PowerShell will fail — it must be executed from a WSL bash shell.
+
+---
 
 ### 3. Build the image
 
