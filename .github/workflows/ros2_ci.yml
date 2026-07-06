@@ -11,9 +11,9 @@ env:
 
 jobs:
 
-# ═══════════════════════════════════════
-# 1. UNIT TEST (task_manager)
-# ═══════════════════════════════════════
+  # ═══════════════════════════════════════
+  # 1. UNIT TEST (task_manager)
+  # ═══════════════════════════════════════
   unit_tests:
     runs-on: ubuntu-latest
 
@@ -38,9 +38,9 @@ jobs:
             --cov-report=term-missing \
             --cov-fail-under=70
 
-# ═══════════════════════════════════════
-# 2. ROS2 BUILD
-# ═══════════════════════════════════════
+  # ═══════════════════════════════════════
+  # 2. ROS2 BUILD
+  # ═══════════════════════════════════════
   build:
     runs-on: ubuntu-latest
     container:
@@ -48,10 +48,6 @@ jobs:
 
     steps:
       # FIX: teb_local_planner, m-explore-ros2, costmap_converter là git submodule
-      # (gitlink 160000 trong index). Không có submodules: recursive thì checkout
-      # để lại 3 thư mục rỗng -> colcon build không thấy package (thiếu CMakeLists.txt/package.xml).
-      # LƯU Ý: repo hiện thiếu file .gitmodules -> nếu submodule chưa có URL khai báo,
-      # bước init này sẽ không fetch được gì. Cần bổ sung/khôi phục .gitmodules trước.
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -70,22 +66,22 @@ jobs:
             libsuitesparse-dev \
             libeigen3-dev
 
-          # FIX: rosdep init trước update (image osrf/ros đôi khi chưa init sẵn;
-          # init lần 2 sẽ báo "already exists" nên bỏ qua lỗi bằng "|| true")
+          # rosdep init may already be done inside the container; ignore errors
           rosdep init || true
           rosdep update
-          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y
+          # skip the problematic rosdep key if it is not present in rosdep DB
+          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y --skip-keys="libsuitesparse-dev"
 
-            - name: Build
-              shell: bash
-              run: |
-                source /opt/ros/$ROS_DISTRO/setup.bash
-                cd $WORKSPACE
-                colcon build
+      - name: Build
+        shell: bash
+        run: |
+          source /opt/ros/$ROS_DISTRO/setup.bash
+          cd $WORKSPACE
+          colcon build
 
-# ═══════════════════════════════════════
-# 3. SIMULATION TEST (KEY PART)
-# ═══════════════════════════════════════
+  # ═══════════════════════════════════════
+  # 3. SIMULATION TEST (KEY PART)
+  # ═══════════════════════════════════════
   simulation:
     needs: build
     runs-on: ubuntu-latest
@@ -93,9 +89,6 @@ jobs:
       image: osrf/ros:humble-desktop-full
 
     steps:
-      # FIX: job này chạy trên container riêng (không needs rosdep từ job build),
-      # nên cũng cần submodules: recursive giống job build, nếu không
-      # teb_local_planner/m-explore-ros2/costmap_converter sẽ rỗng.
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -109,7 +102,9 @@ jobs:
             ros-humble-slam-toolbox \
             python3-rosdep \
             python3-colcon-common-extensions \
-            xvfb
+            xvfb \
+            libsuitesparse-dev \
+            libeigen3-dev
 
       - name: Start virtual display
         run: |
@@ -123,12 +118,9 @@ jobs:
           mkdir -p $WORKSPACE/src
           cp -r src/* $WORKSPACE/src/
 
-          # FIX: job build system deps riêng (rosdep chưa từng chạy trong job này),
-          # thiếu bước này thì teb_local_planner (cần libg2o-dev, libsuitesparse-dev)
-          # và các package khác sẽ fail ở bước cmake/configure.
           rosdep init || true
           rosdep update
-          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y
+          rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y --skip-keys="libsuitesparse-dev"
 
           cd $WORKSPACE
           colcon build
@@ -139,11 +131,6 @@ jobs:
           source /opt/ros/$ROS_DISTRO/setup.bash
           source $WORKSPACE/install/setup.bash
 
-          # FIX: "scripts" không phải tên package ROS2 (launch file này nằm ở
-          # thư mục scripts/ tại repo root, không thuộc src/ nên không được copy
-          # vào $WORKSPACE, và cũng không có package.xml để ros2 launch resolve).
-          # Gọi trực tiếp bằng đường dẫn file, giống cách docker-compose.yml đang dùng
-          # ("ros2 launch /ros2_ws/scripts/turtlebot4_headless.launch.py").
           ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" &
           sleep 25
 
@@ -160,10 +147,6 @@ jobs:
           ros2 action list | grep navigate_to_pose || exit 1
 
           echo "=== Check cmd_vel ==="
-          # FIX: "ros2 topic echo --once" sẽ treo vô thời hạn nếu chưa từng có
-          # message nào publish trên /cmd_vel (robot chưa di chuyển) -> job hang
-          # tới khi hết timeout của GitHub Actions (rất lâu, tốn phút chạy CI).
-          # Bọc timeout ngắn để fail nhanh, có thông báo rõ ràng thay vì hang.
           timeout 15 ros2 topic echo /cmd_vel --once || { echo "No /cmd_vel message within 15s"; exit 1; }
 
           echo "CI PASS"
