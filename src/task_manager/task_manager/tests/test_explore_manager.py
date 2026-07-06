@@ -7,7 +7,14 @@ Cơ chế chọn controller: publish std_msgs/String lên topic
 `/controller_selector` (cùng cơ chế NavigationManager dùng cho goto/patrol) —
 KHÔNG còn dùng service `set_parameters` (đã bị xoá vì explore_node không hề
 khai báo parameter `controller_id`, luôn bị reject).
+
+Cơ chế stop(): gửi SIGTERM cho cả process group qua os.killpg() ngay lập tức
+(không block), rồi lên lịch một timer 1.5s gọi _force_kill_if_alive() để
+SIGKILL cưỡng bức nếu tiến trình vẫn còn sống — thay cho proc.wait(timeout=...)
++ proc.terminate()/proc.kill() cũ (từng block executor đơn luồng).
 """
+
+import signal
 
 import pytest
 from unittest.mock import MagicMock, patch
@@ -15,6 +22,7 @@ from unittest.mock import MagicMock, patch
 from task_manager.managers.explore_manager import (
     ExploreManager,
     ALGO_TO_CONTROLLER,
+    _SELECTOR_QOS,
 )
 
 
@@ -25,10 +33,11 @@ class FakeLogger:
     def debug(self, m="", **kw): pass
 
 
-def make_running_proc():
+def make_running_proc(pid=1234):
     """subprocess.Popen mock: poll() trả None nghĩa là tiến trình còn sống."""
     proc = MagicMock()
     proc.poll.return_value = None
+    proc.pid = pid
     return proc
 
 
@@ -107,14 +116,21 @@ class TestStart:
         published_msg = controller_pub.publish.call_args[0][0]
         assert published_msg.data == ALGO_TO_CONTROLLER['teb']
 
-    def test_start_waits_for_subscriber_before_publishing(self):
-        em, _, _, controller_pub = make_explore_mgr()
-        # Chưa có subscriber lúc đầu, xuất hiện sau vài lần poll
-        controller_pub.get_subscription_count.side_effect = [0, 0, 1]
-        em._proc = make_running_proc()
-        with patch('task_manager.managers.explore_manager.time.sleep'):
-            em.start('dwa')
-        controller_pub.publish.assert_called_once()
+    def test_controller_selector_publisher_uses_latched_qos(self):
+        # Thay cho test_start_waits_for_subscriber_before_publishing (cũ):
+        # không còn poll get_subscription_count()/time.sleep() nữa — publisher
+        # /controller_selector được tạo với QoS TRANSIENT_LOCAL (latched) ngay
+        # từ __init__, nên late-joining subscriber vẫn nhận được value cuối
+        # mà không cần chờ.
+        em, node, _, _ = make_explore_mgr()
+        calls = node.create_publisher.call_args_list
+        # thứ tự tạo publisher trong __init__: /explore/resume rồi /controller_selector
+        topic_arg = calls[1][0][1]
+        qos_arg = calls[1][0][2]
+        assert topic_arg == '/controller_selector'
+        assert qos_arg is _SELECTOR_QOS
+        assert _SELECTOR_QOS.durability.name == 'TRANSIENT_LOCAL' \
+            if hasattr(_SELECTOR_QOS.durability, 'name') else True
 
 
 class TestPause:
@@ -134,24 +150,59 @@ class TestPause:
 
 
 class TestStop:
-    def test_stop_terminates_process(self):
+    def test_stop_sends_sigterm_to_process_group_and_schedules_grace_timer(self):
         em, *_ = make_explore_mgr()
-        proc = make_running_proc()
+        proc = make_running_proc(pid=1234)
         em._proc = proc
         em._exploring = True
-        em.stop()
-        proc.terminate.assert_called_once()
+
+        with patch('task_manager.managers.explore_manager.os.getpgid', return_value=1234) as mock_getpgid, \
+             patch('task_manager.managers.explore_manager.os.killpg') as mock_killpg:
+            em.stop()
+
+        mock_getpgid.assert_called_once_with(1234)
+        mock_killpg.assert_called_once_with(1234, signal.SIGTERM)
+        # state đã cập nhật ngay lập tức, không đợi tiến trình thật sự thoát
         assert em._proc is None
         assert em.is_exploring is False
+        # timer cưỡng bức kill sau grace period phải được lên lịch (1.5s)
+        em._node.create_timer.assert_called_once()
+        assert em._node.create_timer.call_args[0][0] == 1.5
 
-    def test_stop_force_kills_on_timeout(self):
+    def test_force_kill_if_alive_sends_sigkill_when_process_still_running(self):
         em, *_ = make_explore_mgr()
-        proc = make_running_proc()
-        proc.wait.side_effect = Exception("timeout")
+        proc = make_running_proc(pid=1234)
         em._proc = proc
-        em.stop()
-        proc.kill.assert_called_once()
-        assert em._proc is None
+
+        with patch('task_manager.managers.explore_manager.os.getpgid', return_value=1234), \
+             patch('task_manager.managers.explore_manager.os.killpg'):
+            em.stop()
+
+        # mô phỏng timer 1.5s hết hạn trong khi tiến trình vẫn còn sống
+        # (proc.poll() vẫn trả None, xem make_running_proc)
+        with patch('task_manager.managers.explore_manager.os.getpgid', return_value=1234) as mock_getpgid, \
+             patch('task_manager.managers.explore_manager.os.killpg') as mock_killpg:
+            em._force_kill_if_alive()
+
+        mock_getpgid.assert_called_once_with(1234)
+        mock_killpg.assert_called_once_with(1234, signal.SIGKILL)
+
+    def test_force_kill_if_alive_skips_when_process_already_exited(self):
+        em, *_ = make_explore_mgr()
+        proc = make_running_proc(pid=1234)
+        em._proc = proc
+
+        with patch('task_manager.managers.explore_manager.os.getpgid', return_value=1234), \
+             patch('task_manager.managers.explore_manager.os.killpg'):
+            em.stop()
+
+        # tiến trình đã tự thoát trước khi timer kịp chạy
+        em._pending_kill_proc.poll.return_value = 0
+
+        with patch('task_manager.managers.explore_manager.os.killpg') as mock_killpg:
+            em._force_kill_if_alive()
+
+        mock_killpg.assert_not_called()
 
     def test_stop_noop_when_already_stopped(self):
         em, *_ = make_explore_mgr()

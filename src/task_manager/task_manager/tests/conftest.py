@@ -30,17 +30,19 @@ def _install_ros_stubs() -> None:
     rclpy = _mod('rclpy')
     rclpy.ok = lambda: True
     rclpy_action = _mod('rclpy.action')
+    rclpy_action.ActionClient = MagicMock
+
     rclpy_qos = _mod('rclpy.qos')
 
     class QoSDurabilityPolicy:
-        TRANSIENT_LOCAL = 1
-        VOLATILE = 2
+        TRANSIENT_LOCAL = type('_Enum', (), {'name': 'TRANSIENT_LOCAL'})()
+        VOLATILE = type('_Enum', (), {'name': 'VOLATILE'})()
 
     class QoSHistoryPolicy:
-        KEEP_LAST = 1
+        KEEP_LAST = type('_Enum', (), {'name': 'KEEP_LAST'})()
 
     class QoSReliabilityPolicy:
-        RELIABLE = 1
+        RELIABLE = type('_Enum', (), {'name': 'RELIABLE'})()
 
     class QoSProfile:
         def __init__(self, **kw):
@@ -51,7 +53,6 @@ def _install_ros_stubs() -> None:
     rclpy_qos.QoSHistoryPolicy = QoSHistoryPolicy
     rclpy_qos.QoSReliabilityPolicy = QoSReliabilityPolicy
     rclpy_qos.QoSProfile = QoSProfile
-    rclpy_action.ActionClient = MagicMock
 
     sensor_msg = _mod('sensor_msgs.msg')
 
