@@ -26,7 +26,7 @@ jobs:
 
       - name: Install deps
         run: |
-          pip install pytest pytest-cov
+          pip install pytest pytest-cov pyyaml
 
       - name: Run tests
         working-directory: src/task_manager
@@ -75,6 +75,7 @@ jobs:
           rosdep install --from-paths $WORKSPACE/src --ignore-src -r -y
 
       - name: Build
+        shell: bash
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
           cd $WORKSPACE
@@ -114,6 +115,7 @@ jobs:
           echo "DISPLAY=:99" >> $GITHUB_ENV
 
       - name: Build workspace
+        shell: bash
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
           mkdir -p $WORKSPACE/src
@@ -130,6 +132,7 @@ jobs:
           colcon build
 
       - name: Launch TB4 headless
+        shell: bash
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
           source $WORKSPACE/install/setup.bash
@@ -143,6 +146,7 @@ jobs:
           sleep 25
 
       - name: Verify system
+        shell: bash
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
           source $WORKSPACE/install/setup.bash
