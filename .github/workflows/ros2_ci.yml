@@ -171,109 +171,147 @@ jobs:
           grep -q '"FollowPathTEB"' /tmp/ci_config/nav2_params_ci.yaml && \
             { echo "ERROR: sed pattern không khớp, kiểm tra lại nav2_params.yaml gốc"; exit 1; } || true
 
-      - name: Launch simulator (Gazebo)
+      # BUG cũ: step "Verify system" thiếu `done` đóng vòng for -> shell syntax
+      # error, fail chắc chắn 100% bất kể RTF (đã fix bằng cách viết lại dưới đây).
+      #
+      # RTF trên GitHub-hosted runner (không GPU, render bằng llvmpipe) không ổn định:
+      # world "warehouse" khá nặng (nhiều mesh/texture) -> khi runner bị tranh chấp
+      # CPU, controller_manager/configure_controller timeout (10s x3) làm
+      # diffdrive_controller spawner chết -> /scan hoặc tf odom->base_link không bao
+      # giờ xuất hiện -> toàn bộ chuỗi bring-up fail dù code không có bug.
+      # Fix triệt để (world nhẹ hơn / self-hosted runner có GPU) là việc lớn hơn,
+      # để riêng. Trước mắt bọc retry quanh toàn bộ chuỗi sim->SLAM->Nav2->verify,
+      # cleanup process cũ giữa các lần thử.
+      # TODO dài hạn: thay world "warehouse" bằng world nhẹ hơn cho CI, hoặc runner
+      # có GPU, để giảm số lần cần retry.
+      - name: Bring up stack (Gazebo -> SLAM -> Nav2) & verify, with retry on RTF flakiness
         shell: bash
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
           source $WORKSPACE/install/setup.bash
 
-          ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" \
-            model:=lite world:=warehouse render_engine:=ogre &
-          echo $! > /tmp/sim_pid
+          MAX_ATTEMPTS=2
 
-          echo "=== Waiting for simulator ready (max 180s): /scan + tf odom->base_link ==="
-          elapsed=0
-          until ros2 topic list 2>/dev/null | grep -q /scan \
-              && timeout 5 ros2 run tf2_ros tf2_echo odom base_link 2>/dev/null | grep -q Translation; do
-            if ! kill -0 "$(cat /tmp/sim_pid)" 2>/dev/null; then
-              echo "Simulator process died during startup"; exit 1
+          cleanup_attempt() {
+            for f in /tmp/sim_pid /tmp/slam_pid /tmp/nav_pid; do
+              [ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null
+              rm -f "$f"
+            done
+            pkill -9 -f "ros2 launch" 2>/dev/null || true
+            pkill -9 -f "gzserver|ign gazebo|gz sim" 2>/dev/null || true
+            sleep 3
+          }
+
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "########## Attempt ${attempt}/${MAX_ATTEMPTS} ##########"
+            ATTEMPT_OK=1
+
+            echo "=== Launch simulator (Gazebo) ==="
+            ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" \
+              model:=lite world:=warehouse render_engine:=ogre &
+            echo $! > /tmp/sim_pid
+
+            echo "=== Waiting for simulator ready (max 180s): /scan + tf odom->base_link ==="
+            elapsed=0
+            until ros2 topic list 2>/dev/null | grep -q /scan \
+                && timeout 5 ros2 run tf2_ros tf2_echo odom base_link 2>/dev/null | grep -q Translation; do
+              if ! kill -0 "$(cat /tmp/sim_pid)" 2>/dev/null; then
+                echo "Simulator process died during startup"; ATTEMPT_OK=0; break
+              fi
+              elapsed=$((elapsed + 5))
+              if [ "$elapsed" -ge 180 ]; then
+                echo "Timed out waiting for simulator readiness"; ATTEMPT_OK=0; break
+              fi
+              sleep 5
+            done
+            [ "$ATTEMPT_OK" -eq 1 ] && echo "Simulator ready after ${elapsed}s"
+
+            if [ "$ATTEMPT_OK" -eq 1 ]; then
+              echo "=== Launch SLAM ==="
+              ros2 launch slam_toolbox online_async_launch.py \
+                slam_params_file:="${GITHUB_WORKSPACE}/config/slam/slam_toolbox_params.yaml" \
+                use_sim_time:=true &
+              echo $! > /tmp/slam_pid
+
+              echo "=== Waiting for SLAM ready (max 120s): /map + tf map frame ==="
+              elapsed=0
+              until ros2 topic list 2>/dev/null | grep -q /map \
+                  && timeout 5 bash -lc 'ros2 topic echo /tf 2>/dev/null | grep -m1 -q "frame_id: map"'; do
+                if ! kill -0 "$(cat /tmp/slam_pid)" 2>/dev/null; then
+                  echo "SLAM process died during startup"; ATTEMPT_OK=0; break
+                fi
+                elapsed=$((elapsed + 5))
+                if [ "$elapsed" -ge 120 ]; then
+                  echo "Timed out waiting for SLAM readiness"; ATTEMPT_OK=0; break
+                fi
+                sleep 5
+              done
+              [ "$ATTEMPT_OK" -eq 1 ] && echo "SLAM ready after ${elapsed}s"
             fi
-            elapsed=$((elapsed + 5))
-            if [ "$elapsed" -ge 180 ]; then
-              echo "Timed out waiting for simulator readiness"; exit 1
+
+            if [ "$ATTEMPT_OK" -eq 1 ]; then
+              echo "=== Launch Nav2 ==="
+              ros2 launch nav2_bringup navigation_launch.py \
+                use_sim_time:=true \
+                params_file:=/tmp/ci_config/nav2_params_ci.yaml \
+                autostart:=true &
+              echo $! > /tmp/nav_pid
+
+              echo "=== Waiting for Nav2 ready (max 90s): /local_costmap/costmap ==="
+              elapsed=0
+              until ros2 topic list 2>/dev/null | grep -q /local_costmap/costmap; do
+                if ! kill -0 "$(cat /tmp/nav_pid)" 2>/dev/null; then
+                  echo "Nav2 process died during startup"; ATTEMPT_OK=0; break
+                fi
+                elapsed=$((elapsed + 5))
+                if [ "$elapsed" -ge 90 ]; then
+                  echo "Timed out waiting for Nav2 readiness"; ATTEMPT_OK=0; break
+                fi
+                sleep 5
+              done
+              [ "$ATTEMPT_OK" -eq 1 ] && echo "Nav2 ready after ${elapsed}s"
             fi
-            sleep 5
+
+            if [ "$ATTEMPT_OK" -eq 1 ]; then
+              echo "=== Check all processes still alive ==="
+              for f in /tmp/sim_pid /tmp/slam_pid /tmp/nav_pid; do
+                kill -0 "$(cat "$f")" 2>/dev/null || { echo "Process from $f died"; ATTEMPT_OK=0; }
+              done
+            fi
+
+            if [ "$ATTEMPT_OK" -eq 1 ]; then
+              echo "=== Topics ==="
+              ros2 topic list
+
+              echo "=== Check Nav2 action server ==="
+              ros2 action list | grep navigate_to_pose || ATTEMPT_OK=0
+            fi
+
+            if [ "$ATTEMPT_OK" -eq 1 ]; then
+              # Dùng tọa độ waypoint "diem_A" thật từ config/waypoints.yaml (x=1.0, y=0.0)
+              # thay vì tọa độ tùy ý, để chắc chắn nằm trong khu vực world warehouse đã load.
+              echo "=== Sending goal (diem_A) to trigger motion ==="
+              ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+                "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}" \
+                --feedback &
+              GOAL_PID=$!
+
+              echo "=== Check cmd_vel ==="
+              timeout 30 ros2 topic echo /cmd_vel --once || { echo "No /cmd_vel message within 30s after goal sent"; ATTEMPT_OK=0; }
+              kill $GOAL_PID 2>/dev/null || true
+            fi
+
+            if [ "$ATTEMPT_OK" -eq 1 ]; then
+              echo "CI PASS (attempt ${attempt})"
+              exit 0
+            fi
+
+            echo "Attempt ${attempt} failed."
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "Cleaning up and retrying..."
+              cleanup_attempt
+            fi
           done
-          echo "Simulator ready after ${elapsed}s"
 
-      - name: Launch SLAM
-        shell: bash
-        run: |
-          source /opt/ros/$ROS_DISTRO/setup.bash
-          source $WORKSPACE/install/setup.bash
-
-          ros2 launch slam_toolbox online_async_launch.py \
-            slam_params_file:="${GITHUB_WORKSPACE}/config/slam/slam_toolbox_params.yaml" \
-            use_sim_time:=true &
-          echo $! > /tmp/slam_pid
-
-          echo "=== Waiting for SLAM ready (max 120s): /map + tf map frame ==="
-          elapsed=0
-          until ros2 topic list 2>/dev/null | grep -q /map \
-              && timeout 5 bash -lc 'ros2 topic echo /tf 2>/dev/null | grep -m1 -q "frame_id: map"'; do
-            if ! kill -0 "$(cat /tmp/slam_pid)" 2>/dev/null; then
-              echo "SLAM process died during startup"; exit 1
-            fi
-            elapsed=$((elapsed + 5))
-            if [ "$elapsed" -ge 120 ]; then
-              echo "Timed out waiting for SLAM readiness"; exit 1
-            fi
-            sleep 5
-          done
-          echo "SLAM ready after ${elapsed}s"
-
-      - name: Launch Nav2
-        shell: bash
-        run: |
-          source /opt/ros/$ROS_DISTRO/setup.bash
-          source $WORKSPACE/install/setup.bash
-
-          ros2 launch nav2_bringup navigation_launch.py \
-            use_sim_time:=true \
-            params_file:=/tmp/ci_config/nav2_params_ci.yaml \
-            autostart:=true &
-          echo $! > /tmp/nav_pid
-
-          echo "=== Waiting for Nav2 ready (max 90s): /local_costmap/costmap ==="
-          elapsed=0
-          until ros2 topic list 2>/dev/null | grep -q /local_costmap/costmap; do
-            if ! kill -0 "$(cat /tmp/nav_pid)" 2>/dev/null; then
-              echo "Nav2 process died during startup"; exit 1
-            fi
-            elapsed=$((elapsed + 5))
-            if [ "$elapsed" -ge 90 ]; then
-              echo "Timed out waiting for Nav2 readiness"; exit 1
-            fi
-            sleep 5
-          done
-          echo "Nav2 ready after ${elapsed}s"
-
-      - name: Verify system
-        shell: bash
-        run: |
-          source /opt/ros/$ROS_DISTRO/setup.bash
-          source $WORKSPACE/install/setup.bash
-
-          echo "=== Check all processes still alive ==="
-          for f in /tmp/sim_pid /tmp/slam_pid /tmp/nav_pid; do
-            kill -0 "$(cat "$f")" 2>/dev/null || { echo "Process from $f died"; exit 1; }
-
-          echo "=== Topics ==="
-          ros2 topic list
-
-          echo "=== Check Nav2 action server ==="
-          ros2 action list | grep navigate_to_pose || exit 1
-
-          # Dùng tọa độ waypoint "diem_A" thật từ config/waypoints.yaml (x=1.0, y=0.0)
-          # thay vì tọa độ tùy ý, để chắc chắn nằm trong khu vực world warehouse đã load.
-          echo "=== Sending goal (diem_A) to trigger motion ==="
-          ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
-            "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}" \
-            --feedback &
-          GOAL_PID=$!
-
-          echo "=== Check cmd_vel ==="
-          timeout 30 ros2 topic echo /cmd_vel --once || { echo "No /cmd_vel message within 30s after goal sent"; kill $GOAL_PID 2>/dev/null; exit 1; }
-
-          kill $GOAL_PID 2>/dev/null || true
-          echo "CI PASS"
+          echo "All ${MAX_ATTEMPTS} attempts failed"
+          exit 1
