@@ -216,14 +216,32 @@ jobs:
 
           MAX_ATTEMPTS=2
 
+          # QUAN TRỌNG: mỗi `ros2 launch ...&` sinh ra hàng chục process con (gzserver,
+          # parameter_bridge, robot_state_publisher, spawner...). `kill -9 <pid launch>`
+          # CHỈ giết đúng process đó — SIGKILL không tự propagate xuống con, và ros2
+          # launch bình thường tự dọn con khi nhận SIGTERM/SIGINT (nó có handler) nhưng
+          # bị SIGKILL thì chết ngay, không kịp dọn -> cả cây con mồ côi, vẫn sống sang
+          # attempt sau (2 stack Gazebo/robot_state_publisher chạy song song -> double
+          # tải CPU + 2 nguồn /clock và TF trùng frame -> "jump back in time" TF buffer).
+          # Fix: chạy mỗi launch trong `setsid` để nó là leader của 1 process group mới
+          # (PID == PGID), rồi cleanup bằng `kill -9 -- -$PGID` để giết cả group.
           cleanup_attempt() {
             for f in /tmp/sim_pid /tmp/slam_pid /tmp/nav_pid; do
-              [ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null
+              if [ -f "$f" ]; then
+                pgid="$(cat "$f")"
+                kill -9 -- "-${pgid}" 2>/dev/null
+                kill -9 "$pgid" 2>/dev/null
+              fi
               rm -f "$f"
             done
+            # fallback, phòng process nào đó tự detach khỏi group (setsid lồng nhau...)
             pkill -9 -f "ros2 launch" 2>/dev/null || true
-            pkill -9 -f "gzserver|ign gazebo|gz sim" 2>/dev/null || true
-            sleep 3
+            pkill -9 -f "gzserver|ign gazebo|gz sim|parameter_bridge|robot_state_publisher" 2>/dev/null || true
+            sleep 5
+            leftover="$(pgrep -f 'ign gazebo|gzserver|gz sim|parameter_bridge' | wc -l)"
+            if [ "$leftover" -gt 0 ]; then
+              echo "CẢNH BÁO: vẫn còn ${leftover} process liên quan chưa dọn hết sau cleanup"
+            fi
           }
 
           for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
@@ -231,7 +249,7 @@ jobs:
             ATTEMPT_OK=1
 
             echo "=== Launch simulator (Gazebo) ==="
-            ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" \
+            setsid ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" \
               model:=lite world:=warehouse render_engine:=ogre &
             echo $! > /tmp/sim_pid
 
@@ -252,7 +270,7 @@ jobs:
 
             if [ "$ATTEMPT_OK" -eq 1 ]; then
               echo "=== Launch SLAM ==="
-              ros2 launch slam_toolbox online_async_launch.py \
+              setsid ros2 launch slam_toolbox online_async_launch.py \
                 slam_params_file:="${GITHUB_WORKSPACE}/config/slam/slam_toolbox_params.yaml" \
                 use_sim_time:=true &
               echo $! > /tmp/slam_pid
@@ -275,7 +293,7 @@ jobs:
 
             if [ "$ATTEMPT_OK" -eq 1 ]; then
               echo "=== Launch Nav2 ==="
-              ros2 launch nav2_bringup navigation_launch.py \
+              setsid ros2 launch nav2_bringup navigation_launch.py \
                 use_sim_time:=true \
                 params_file:=/tmp/ci_config/nav2_params_ci.yaml \
                 autostart:=true &
