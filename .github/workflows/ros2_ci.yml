@@ -131,6 +131,28 @@ jobs:
             ros-humble-rmw-cyclonedds-cpp \
             xvfb
 
+      # world "warehouse" quá nặng (nhiều mesh/texture) cho render CPU-only (llvmpipe)
+      # trên GitHub-hosted runner (không GPU) -> RTF quá thấp -> controller_manager
+      # timeout liên tục dù đã patch update_rate. Đổi sang world nhẹ hơn "depot".
+      # LƯU Ý: tên world "depot" là suy đoán dựa trên hiểu biết chung về package
+      # turtlebot4_ignition_bringup, CHƯA được xác nhận trực tiếp trong package đã
+      # cài ở CI này. Step này tự kiểm tra trước khi launch: nếu "depot.sdf" không
+      # tồn tại, fail ngay kèm danh sách toàn bộ world .sdf thật sự có sẵn.
+      - name: Verify CI world exists (depot) & list alternatives if wrong
+        run: |
+          CI_WORLD="depot"
+          FOUND=$(find /opt/ros/humble/share/turtlebot4_ignition_bringup/worlds \
+                       /opt/ros/humble/share/irobot_create_ignition_bringup/worlds \
+                       -iname "${CI_WORLD}.sdf" 2>/dev/null | head -1)
+          if [ -z "$FOUND" ]; then
+            echo "ERROR: không tìm thấy ${CI_WORLD}.sdf. Danh sách world .sdf thật sự có sẵn:"
+            find /opt/ros/humble/share/turtlebot4_ignition_bringup/worlds \
+                 /opt/ros/humble/share/irobot_create_ignition_bringup/worlds \
+                 -iname "*.sdf" 2>/dev/null
+            exit 1
+          fi
+          echo "OK: tìm thấy world tại $FOUND"
+
       - name: Start virtual display
         run: |
           Xvfb :99 -screen 0 960x540x24 &
@@ -177,11 +199,15 @@ jobs:
       #    simulation period (0.003 s)."
       # File /opt/ros/humble/share/irobot_create_control/config/control.yaml (cài qua
       # apt, phụ thuộc của ros-humble-turtlebot4-simulator) khai báo update_rate: 1000
-      # cho controller_manager, nhưng physics step của world warehouse chỉ chạy được
-      # 0.003s/step (~333Hz) trên runner không GPU -> mismatch tĩnh, KHÔNG phải flaky
-      # do tranh chấp CPU (lỗi lặp lại y hệt ở 2 lần chạy khác nhau) -> retry loop ở
-      # step dưới không giải quyết được, phải patch update_rate khớp với physics step
-      # thật. Chỉ patch bản cài trong container CI, không đụng gì tới repo.
+      # cho controller_manager, nhưng physics step đo được trên world warehouse chỉ
+      # chạy được 0.003s/step (~333Hz) trên runner không GPU -> mismatch tĩnh, KHÔNG
+      # phải flaky do tranh chấp CPU (lỗi lặp lại y hệt ở 2 lần chạy khác nhau) ->
+      # patch update_rate khớp với physics step thật (1000 -> 300).
+      # LƯU Ý: 0.003s đo trên world "warehouse". Sau khi đổi sang "depot" (xem step
+      # "Verify CI world exists"), physics step có thể khác nếu depot.sdf khai báo
+      # <physics><max_step_size> khác -> cần soi lại log warning "Desired controller
+      # update period..." ở lần chạy tới để xác nhận 300 còn khớp không.
+      # Chỉ patch bản cài trong container CI, không đụng gì tới repo.
       - name: Patch irobot_create_control update_rate for CI (match Gazebo physics step)
         run: |
           CONTROL_YAML="/opt/ros/humble/share/irobot_create_control/config/control.yaml"
@@ -198,16 +224,12 @@ jobs:
       # BUG cũ: step "Verify system" thiếu `done` đóng vòng for -> shell syntax
       # error, fail chắc chắn 100% bất kể RTF (đã fix bằng cách viết lại dưới đây).
       #
-      # RTF trên GitHub-hosted runner (không GPU, render bằng llvmpipe) không ổn định:
-      # world "warehouse" khá nặng (nhiều mesh/texture) -> khi runner bị tranh chấp
-      # CPU, controller_manager/configure_controller timeout (10s x3) làm
-      # diffdrive_controller spawner chết -> /scan hoặc tf odom->base_link không bao
-      # giờ xuất hiện -> toàn bộ chuỗi bring-up fail dù code không có bug.
-      # Fix triệt để (world nhẹ hơn / self-hosted runner có GPU) là việc lớn hơn,
-      # để riêng. Trước mắt bọc retry quanh toàn bộ chuỗi sim->SLAM->Nav2->verify,
-      # cleanup process cũ giữa các lần thử.
-      # TODO dài hạn: thay world "warehouse" bằng world nhẹ hơn cho CI, hoặc runner
-      # có GPU, để giảm số lần cần retry.
+      # RTF trên GitHub-hosted runner (không GPU, render bằng llvmpipe) không ổn định.
+      # Đã xử lý theo 3 lớp: (1) patch update_rate irobot_create_control khớp physics
+      # step, (2) đổi world "warehouse" (nặng) -> "depot" (nhẹ hơn, xem step "Verify
+      # CI world exists"), (3) retry loop dưới đây làm lưới an toàn cho phần flakiness
+      # còn sót lại do tranh chấp CPU giữa các job chạy song song trên runner shared.
+      # Nếu vẫn fail thường xuyên sau các fix trên, khả năng cần runner có GPU thật.
       - name: Bring up stack (Gazebo -> SLAM -> Nav2) & verify, with retry on RTF flakiness
         shell: bash
         run: |
@@ -250,7 +272,7 @@ jobs:
 
             echo "=== Launch simulator (Gazebo) ==="
             setsid ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" \
-              model:=lite world:=warehouse render_engine:=ogre &
+              model:=lite world:=depot render_engine:=ogre &
             echo $! > /tmp/sim_pid
 
             echo "=== Waiting for simulator ready (max 180s): /scan + tf odom->base_link ==="
@@ -331,7 +353,13 @@ jobs:
 
             if [ "$ATTEMPT_OK" -eq 1 ]; then
               # Dùng tọa độ waypoint "diem_A" thật từ config/waypoints.yaml (x=1.0, y=0.0)
-              # thay vì tọa độ tùy ý, để chắc chắn nằm trong khu vực world warehouse đã load.
+              # thay vì tọa độ tùy ý, để chắc chắn nằm trong khu vực world.
+              # LƯU Ý: tọa độ này được xác nhận hợp lệ với world "warehouse" cũ. Sau khi
+              # đổi sang "depot", CHƯA xác nhận (1.0, 0.0) có nằm trong khu vực free-space
+              # của depot hay không (spawn robot mặc định vẫn ở gốc tọa độ x=0,y=0,z=0 -
+              # xem ARGUMENTS trong turtlebot4_headless.launch.py). Nếu goal bị Nav2 từ
+              # chối (invalid pose/costmap) ở lần chạy tới, cần kiểm tra lại bounds thật
+              # của depot.sdf và chỉnh tọa độ cho khớp.
               echo "=== Sending goal (diem_A) to trigger motion ==="
               ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
                 "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}" \
