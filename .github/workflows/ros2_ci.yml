@@ -171,6 +171,30 @@ jobs:
           grep -q '"FollowPathTEB"' /tmp/ci_config/nav2_params_ci.yaml && \
             { echo "ERROR: sed pattern không khớp, kiểm tra lại nav2_params.yaml gốc"; exit 1; } || true
 
+      # ROOT CAUSE của diffdrive_controller configure timeout (30s, 3 lần) đã điều tra
+      # từ 2 lần chạy CI fail liên tiếp, luôn cùng 1 lỗi trước khi treo:
+      #   "Desired controller update period (0.001 s) is faster than the gazebo
+      #    simulation period (0.003 s)."
+      # File /opt/ros/humble/share/irobot_create_control/config/control.yaml (cài qua
+      # apt, phụ thuộc của ros-humble-turtlebot4-simulator) khai báo update_rate: 1000
+      # cho controller_manager, nhưng physics step của world warehouse chỉ chạy được
+      # 0.003s/step (~333Hz) trên runner không GPU -> mismatch tĩnh, KHÔNG phải flaky
+      # do tranh chấp CPU (lỗi lặp lại y hệt ở 2 lần chạy khác nhau) -> retry loop ở
+      # step dưới không giải quyết được, phải patch update_rate khớp với physics step
+      # thật. Chỉ patch bản cài trong container CI, không đụng gì tới repo.
+      - name: Patch irobot_create_control update_rate for CI (match Gazebo physics step)
+        run: |
+          CONTROL_YAML="/opt/ros/humble/share/irobot_create_control/config/control.yaml"
+          if [ ! -f "$CONTROL_YAML" ]; then
+            echo "ERROR: không tìm thấy $CONTROL_YAML, kiểm tra lại đường dẫn package (có thể đổi version)"; exit 1
+          fi
+          grep -q 'update_rate: 1000' "$CONTROL_YAML" || \
+            { echo "ERROR: không tìm thấy 'update_rate: 1000' trong $CONTROL_YAML, kiểm tra lại nội dung file gốc trước khi sửa sed"; cat "$CONTROL_YAML"; exit 1; }
+          sed -i 's/update_rate: 1000/update_rate: 300/' "$CONTROL_YAML"
+          grep -q 'update_rate: 300' "$CONTROL_YAML" || \
+            { echo "ERROR: sed không áp dụng được"; exit 1; }
+          echo "Patched update_rate 1000 -> 300 in $CONTROL_YAML"
+
       # BUG cũ: step "Verify system" thiếu `done` đóng vòng for -> shell syntax
       # error, fail chắc chắn 100% bất kể RTF (đã fix bằng cách viết lại dưới đây).
       #
