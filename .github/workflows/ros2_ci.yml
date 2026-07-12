@@ -104,13 +104,29 @@ jobs:
           retention-days: 1
 
   # ═══════════════════════════════════════
-  # 3. SIMULATION TEST (KEY PART)
+  # 3. NAV2 SMOKE TEST (đã thu hẹp phạm vi so với "simulation" cũ)
   # ═══════════════════════════════════════
-  # Mô phỏng lại đúng chuỗi khởi động của docker-compose.yml thật:
-  # simulator (Gazebo) -> slam (slam_toolbox) -> navigation (Nav2 bringup)
-  # thay vì chỉ chạy turtlebot4_headless.launch.py (chỉ start Gazebo, KHÔNG
-  # có Nav2 -> mọi check navigate_to_pose trước đây luôn fail).
-  simulation:
+  # LỊCH SỬ: job cũ tên "simulation" cố dựng lại full stack Gazebo -> SLAM ->
+  # Nav2 giống hệt docker-compose.yml thật. Sau nhiều lần vá (patch update_rate,
+  # đổi world warehouse -> depot, retry + process-group cleanup) vẫn liên tục
+  # fail vì GitHub-hosted runner không có GPU, không đủ CPU cho render Gazebo
+  # (kể cả world "nhẹ" depot vẫn đủ nặng để treo controller_manager). Đây là
+  # giới hạn phần cứng của runner, không phải bug code.
+  #
+  # THU HẸP PHẠM VI: bỏ hẳn Gazebo/SLAM/camera OAK-D (nguồn gốc toàn bộ vấn đề
+  # RTF), thay bằng:
+  #   - map_server load 1 static map tự sinh (phòng vuông rỗng, không cần GPU)
+  #   - static_transform_publisher giả lập map->odom->base_link (identity,
+  #     không cần localization/odometry thật)
+  # Mục tiêu job này CHỈ còn là: controller_server load đủ plugin không crash
+  # (FollowPathDWA/FollowPathPP - đã bỏ FollowPathTEB vì lý do Ceres/libg2o cũ),
+  # planner_server tính được path, bt_navigator chạy BT navigate_to_pose.xml
+  # không lỗi, và toàn bộ lifecycle Nav2 lên "active" được.
+  # KHÔNG còn kiểm tra: robot có thực sự di chuyển trong Gazebo, SLAM có build
+  # map đúng không, OAK-D/RPLIDAR bridge có hoạt động không - những phần đó chỉ
+  # kiểm chứng được bằng docker-compose thật trên máy có GPU (local dev), không
+  # còn nằm trong phạm vi CI này nữa.
+  nav2_smoke_test:
     needs: build
     runs-on: ubuntu-latest
     container:
@@ -121,46 +137,15 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install simulation deps
+      # Không cần turtlebot4-simulator/slam-toolbox/xvfb nữa - không còn Gazebo.
+      - name: Install Nav2 deps
         run: |
           apt-get update
           apt-get install -y \
-            ros-humble-turtlebot4-simulator \
             ros-humble-nav2-bringup \
-            ros-humble-slam-toolbox \
-            ros-humble-rmw-cyclonedds-cpp \
-            xvfb
-
-      # world "warehouse" quá nặng (nhiều mesh/texture) cho render CPU-only (llvmpipe)
-      # trên GitHub-hosted runner (không GPU) -> RTF quá thấp -> controller_manager
-      # timeout liên tục dù đã patch update_rate. Đổi sang world nhẹ hơn "depot".
-      # LƯU Ý: tên world "depot" là suy đoán dựa trên hiểu biết chung về package
-      # turtlebot4_ignition_bringup, CHƯA được xác nhận trực tiếp trong package đã
-      # cài ở CI này. Step này tự kiểm tra trước khi launch: nếu "depot.sdf" không
-      # tồn tại, fail ngay kèm danh sách toàn bộ world .sdf thật sự có sẵn.
-      - name: Verify CI world exists (depot) & list alternatives if wrong
-        run: |
-          CI_WORLD="depot"
-          FOUND=$(find /opt/ros/humble/share/turtlebot4_ignition_bringup/worlds \
-                       /opt/ros/humble/share/irobot_create_ignition_bringup/worlds \
-                       -iname "${CI_WORLD}.sdf" 2>/dev/null | head -1)
-          if [ -z "$FOUND" ]; then
-            echo "ERROR: không tìm thấy ${CI_WORLD}.sdf. Danh sách world .sdf thật sự có sẵn:"
-            find /opt/ros/humble/share/turtlebot4_ignition_bringup/worlds \
-                 /opt/ros/humble/share/irobot_create_ignition_bringup/worlds \
-                 -iname "*.sdf" 2>/dev/null
-            exit 1
-          fi
-          echo "OK: tìm thấy world tại $FOUND"
-
-      - name: Start virtual display
-        run: |
-          Xvfb :99 -screen 0 960x540x24 &
-          echo "DISPLAY=:99" >> $GITHUB_ENV
-          # CI không có GPU/EGL -> ép llvmpipe direct rendering, giống hệt
-          # nhánh USE_VIRTUALGL=false trong scripts/vgl_launch.sh
-          echo "LIBGL_ALWAYS_SOFTWARE=1" >> $GITHUB_ENV
-          echo "GALLIUM_DRIVER=llvmpipe" >> $GITHUB_ENV
+            ros-humble-nav2-map-server \
+            ros-humble-nav2-lifecycle-manager \
+            ros-humble-rmw-cyclonedds-cpp
 
       - name: Set DDS env (match docker-compose x-ros-env)
         run: |
@@ -168,220 +153,132 @@ jobs:
           echo "RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> $GITHUB_ENV
           echo "CYCLONEDDS_URI=file://${GITHUB_WORKSPACE}/config/cyclonedds/cyclonedds.xml" >> $GITHUB_ENV
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: ros2-workspace
-          path: /tmp
-
-      - name: Restore workspace
-        shell: bash
+      # Map tối giản tự sinh (không phụ thuộc file .pgm có sẵn nào): phòng vuông
+      # 10x10m, free space toàn bộ trừ viền tường 2px. Đủ để planner_server có
+      # costmap hợp lệ và goal (1.0, 0.0) từ config/waypoints.yaml nằm chắc chắn
+      # trong vùng free (tâm phòng, cách viền tường ~4m).
+      - name: Generate minimal static test map (no Gazebo/PGM asset needed)
         run: |
-          mkdir -p $WORKSPACE
-          tar -xzf /tmp/ws_build.tar.gz -C $WORKSPACE
-          # phòng trường hợp artifact cũ (build trước khi có fix) còn sót binary
-          find $WORKSPACE/install -maxdepth 1 -iname "teb_local_planner*" -exec rm -rf {} + || true
+          mkdir -p /tmp/ci_map
+          python3 -c "w=200;h=200;b=2;border_row=bytes([0]*w);mid_row=bytes([0]*b+[254]*(w-2*b)+[0]*b);rows=[border_row]*b+[mid_row]*(h-2*b)+[border_row]*b;data=b''.join(rows);open('/tmp/ci_map/map.pgm','wb').write(b'P5\n'+str(w).encode()+b' '+str(h).encode()+b'\n255\n'+data);open('/tmp/ci_map/map.yaml','w').write('image: map.pgm\nresolution: 0.05\norigin: [-5.0, -5.0, 0.0]\nnegate: 0\noccupied_thresh: 0.65\nfree_thresh: 0.25\n')"
+          test -s /tmp/ci_map/map.pgm && test -s /tmp/ci_map/map.yaml || { echo "ERROR: sinh map thất bại"; exit 1; }
+          echo "Generated /tmp/ci_map/map.pgm + map.yaml (10m x 10m free room)"
 
-      - name: Patch nav2 params for CI (drop FollowPathTEB)
+      - name: Patch nav2_params.yaml for CI
         run: |
           mkdir -p /tmp/ci_config
-          # teb_local_planner không được build trong CI (xem job build) -> nếu giữ
-          # nguyên controller_plugins gốc, controller_server sẽ crash lúc configure
-          # vì thiếu pluginlib class "teb_local_planner::TebLocalPlannerROS".
-          # Bản patch này chỉ dùng nội bộ cho CI, KHÔNG ghi đè config gốc của repo.
+          SRC="${GITHUB_WORKSPACE}/config/nav2/nav2_params.yaml"
+          DST="/tmp/ci_config/nav2_params_ci.yaml"
+
+          # 1) teb_local_planner không build trong CI (xem job build) -> bỏ
+          #    FollowPathTEB khỏi controller_plugins, như trước giờ.
           sed 's/controller_plugins: \["FollowPathDWA", "FollowPathTEB", "FollowPathPP"\]/controller_plugins: ["FollowPathDWA", "FollowPathPP"]/' \
-            "${GITHUB_WORKSPACE}/config/nav2/nav2_params.yaml" > /tmp/ci_config/nav2_params_ci.yaml
-          grep -q '"FollowPathTEB"' /tmp/ci_config/nav2_params_ci.yaml && \
-            { echo "ERROR: sed pattern không khớp, kiểm tra lại nav2_params.yaml gốc"; exit 1; } || true
+            "$SRC" > "$DST"
+          grep -q '"FollowPathTEB"' "$DST" && \
+            { echo "ERROR: sed (1) không khớp, kiểm tra lại nav2_params.yaml gốc"; exit 1; } || true
 
-      # ROOT CAUSE của diffdrive_controller configure timeout (30s, 3 lần) đã điều tra
-      # từ 2 lần chạy CI fail liên tiếp, luôn cùng 1 lỗi trước khi treo:
-      #   "Desired controller update period (0.001 s) is faster than the gazebo
-      #    simulation period (0.003 s)."
-      # File /opt/ros/humble/share/irobot_create_control/config/control.yaml (cài qua
-      # apt, phụ thuộc của ros-humble-turtlebot4-simulator) khai báo update_rate: 1000
-      # cho controller_manager, nhưng physics step đo được trên world warehouse chỉ
-      # chạy được 0.003s/step (~333Hz) trên runner không GPU -> mismatch tĩnh, KHÔNG
-      # phải flaky do tranh chấp CPU (lỗi lặp lại y hệt ở 2 lần chạy khác nhau) ->
-      # patch update_rate khớp với physics step thật (1000 -> 300).
-      # LƯU Ý: 0.003s đo trên world "warehouse". Sau khi đổi sang "depot" (xem step
-      # "Verify CI world exists"), physics step có thể khác nếu depot.sdf khai báo
-      # <physics><max_step_size> khác -> cần soi lại log warning "Desired controller
-      # update period..." ở lần chạy tới để xác nhận 300 còn khớp không.
-      # Chỉ patch bản cài trong container CI, không đụng gì tới repo.
-      - name: Patch irobot_create_control update_rate for CI (match Gazebo physics step)
-        run: |
-          CONTROL_YAML="/opt/ros/humble/share/irobot_create_control/config/control.yaml"
-          if [ ! -f "$CONTROL_YAML" ]; then
-            echo "ERROR: không tìm thấy $CONTROL_YAML, kiểm tra lại đường dẫn package (có thể đổi version)"; exit 1
-          fi
-          grep -q 'update_rate: 1000' "$CONTROL_YAML" || \
-            { echo "ERROR: không tìm thấy 'update_rate: 1000' trong $CONTROL_YAML, kiểm tra lại nội dung file gốc trước khi sửa sed"; cat "$CONTROL_YAML"; exit 1; }
-          sed -i 's/update_rate: 1000/update_rate: 300/' "$CONTROL_YAML"
-          grep -q 'update_rate: 300' "$CONTROL_YAML" || \
-            { echo "ERROR: sed không áp dụng được"; exit 1; }
-          echo "Patched update_rate 1000 -> 300 in $CONTROL_YAML"
+          # 2) Không còn /clock (không có Gazebo) -> dùng wall clock, tắt use_sim_time
+          #    toàn bộ. Key này lặp lại đồng nhất ở mọi node block trong file.
+          sed -i 's/use_sim_time: true/use_sim_time: false/g' "$DST"
+          grep -q 'use_sim_time: true' "$DST" && \
+            { echo "ERROR: sed (2) còn sót use_sim_time: true"; exit 1; } || true
 
-      # BUG cũ: step "Verify system" thiếu `done` đóng vòng for -> shell syntax
-      # error, fail chắc chắn 100% bất kể RTF (đã fix bằng cách viết lại dưới đây).
-      #
-      # RTF trên GitHub-hosted runner (không GPU, render bằng llvmpipe) không ổn định.
-      # Đã xử lý theo 3 lớp: (1) patch update_rate irobot_create_control khớp physics
-      # step, (2) đổi world "warehouse" (nặng) -> "depot" (nhẹ hơn, xem step "Verify
-      # CI world exists"), (3) retry loop dưới đây làm lưới an toàn cho phần flakiness
-      # còn sót lại do tranh chấp CPU giữa các job chạy song song trên runner shared.
-      # Nếu vẫn fail thường xuyên sau các fix trên, khả năng cần runner có GPU thật.
-      - name: Bring up stack (Gazebo -> SLAM -> Nav2) & verify, with retry on RTF flakiness
+          # 3) BUG PHÁT HIỆN MỚI: bt_navigator hardcode đường dẫn BT XML tuyệt đối
+          #    "/ros2_ws/config/behavior_trees/..." - giả định mount docker-compose.
+          #    Trong CI, $WORKSPACE=/ros2_ws chỉ chứa src/build/install (xem job
+          #    build, step "Setup workspace" chỉ cp src/*), KHÔNG có config/ ->
+          #    path này chưa từng được test tới vì job cũ luôn fail sớm hơn (ở
+          #    Gazebo) trước khi bt_navigator kịp load BT XML. Trỏ lại đúng
+          #    checkout thật trong CI.
+          sed -i "s#/ros2_ws/config/behavior_trees#${GITHUB_WORKSPACE}/config/behavior_trees#g" "$DST"
+          grep -q '/ros2_ws/config/behavior_trees' "$DST" && \
+            { echo "ERROR: sed (3) còn sót path /ros2_ws hardcode"; exit 1; } || true
+
+          # 4) map_server: trỏ vào map CI tự sinh ở step trước.
+          sed -i 's#yaml_filename: ""#yaml_filename: "/tmp/ci_map/map.yaml"#' "$DST"
+          grep -q 'yaml_filename: "/tmp/ci_map/map.yaml"' "$DST" || \
+            { echo "ERROR: sed (4) không khớp yaml_filename"; exit 1; }
+
+          echo "Patched nav2_params_ci.yaml OK"
+
+      - name: Bring up map_server + static TF + Nav2, then verify
         shell: bash
         run: |
           source /opt/ros/$ROS_DISTRO/setup.bash
-          source $WORKSPACE/install/setup.bash
 
-          MAX_ATTEMPTS=2
-
-          # QUAN TRỌNG: mỗi `ros2 launch ...&` sinh ra hàng chục process con (gzserver,
-          # parameter_bridge, robot_state_publisher, spawner...). `kill -9 <pid launch>`
-          # CHỈ giết đúng process đó — SIGKILL không tự propagate xuống con, và ros2
-          # launch bình thường tự dọn con khi nhận SIGTERM/SIGINT (nó có handler) nhưng
-          # bị SIGKILL thì chết ngay, không kịp dọn -> cả cây con mồ côi, vẫn sống sang
-          # attempt sau (2 stack Gazebo/robot_state_publisher chạy song song -> double
-          # tải CPU + 2 nguồn /clock và TF trùng frame -> "jump back in time" TF buffer).
-          # Fix: chạy mỗi launch trong `setsid` để nó là leader của 1 process group mới
-          # (PID == PGID), rồi cleanup bằng `kill -9 -- -$PGID` để giết cả group.
-          cleanup_attempt() {
-            for f in /tmp/sim_pid /tmp/slam_pid /tmp/nav_pid; do
-              if [ -f "$f" ]; then
-                pgid="$(cat "$f")"
-                kill -9 -- "-${pgid}" 2>/dev/null
-                kill -9 "$pgid" 2>/dev/null
-              fi
-              rm -f "$f"
+          cleanup() {
+            for f in /tmp/map_pid /tmp/mgr_pid /tmp/tf1_pid /tmp/tf2_pid /tmp/nav_pid; do
+              [ -f "$f" ] && kill -9 -- "-$(cat "$f")" 2>/dev/null
+              [ -f "$f" ] && kill -9 "$(cat "$f")" 2>/dev/null
             done
-            # fallback, phòng process nào đó tự detach khỏi group (setsid lồng nhau...)
-            pkill -9 -f "ros2 launch" 2>/dev/null || true
-            pkill -9 -f "gzserver|ign gazebo|gz sim|parameter_bridge|robot_state_publisher" 2>/dev/null || true
-            sleep 5
-            leftover="$(pgrep -f 'ign gazebo|gzserver|gz sim|parameter_bridge' | wc -l)"
-            if [ "$leftover" -gt 0 ]; then
-              echo "CẢNH BÁO: vẫn còn ${leftover} process liên quan chưa dọn hết sau cleanup"
-            fi
           }
+          trap cleanup EXIT
 
-          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
-            echo "########## Attempt ${attempt}/${MAX_ATTEMPTS} ##########"
-            ATTEMPT_OK=1
+          echo "=== Launch map_server + dedicated lifecycle_manager ==="
+          setsid ros2 run nav2_map_server map_server \
+            --ros-args --params-file /tmp/ci_config/nav2_params_ci.yaml &
+          echo $! > /tmp/map_pid
 
-            echo "=== Launch simulator (Gazebo) ==="
-            setsid ros2 launch "${GITHUB_WORKSPACE}/scripts/turtlebot4_headless.launch.py" \
-              model:=lite world:=depot render_engine:=ogre &
-            echo $! > /tmp/sim_pid
+          setsid ros2 run nav2_lifecycle_manager lifecycle_manager \
+            --ros-args -p node_names:="['map_server']" -p autostart:=true -p use_sim_time:=false &
+          echo $! > /tmp/mgr_pid
 
-            echo "=== Waiting for simulator ready (max 180s): /scan + tf odom->base_link ==="
-            elapsed=0
-            until ros2 topic list 2>/dev/null | grep -q /scan \
-                && timeout 5 ros2 run tf2_ros tf2_echo odom base_link 2>/dev/null | grep -q Translation; do
-              if ! kill -0 "$(cat /tmp/sim_pid)" 2>/dev/null; then
-                echo "Simulator process died during startup"; ATTEMPT_OK=0; break
-              fi
-              elapsed=$((elapsed + 5))
-              if [ "$elapsed" -ge 180 ]; then
-                echo "Timed out waiting for simulator readiness"; ATTEMPT_OK=0; break
-              fi
-              sleep 5
-            done
-            [ "$ATTEMPT_OK" -eq 1 ] && echo "Simulator ready after ${elapsed}s"
+          echo "=== Static TF: map -> odom -> base_link (identity, không có localization thật) ==="
+          setsid ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 map odom &
+          echo $! > /tmp/tf1_pid
+          setsid ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 odom base_link &
+          echo $! > /tmp/tf2_pid
 
-            if [ "$ATTEMPT_OK" -eq 1 ]; then
-              echo "=== Launch SLAM ==="
-              setsid ros2 launch slam_toolbox online_async_launch.py \
-                slam_params_file:="${GITHUB_WORKSPACE}/config/slam/slam_toolbox_params.yaml" \
-                use_sim_time:=true &
-              echo $! > /tmp/slam_pid
-
-              echo "=== Waiting for SLAM ready (max 120s): /map + tf map frame ==="
-              elapsed=0
-              until ros2 topic list 2>/dev/null | grep -q /map \
-                  && timeout 5 bash -lc 'ros2 topic echo /tf 2>/dev/null | grep -m1 -q "frame_id: map"'; do
-                if ! kill -0 "$(cat /tmp/slam_pid)" 2>/dev/null; then
-                  echo "SLAM process died during startup"; ATTEMPT_OK=0; break
-                fi
-                elapsed=$((elapsed + 5))
-                if [ "$elapsed" -ge 120 ]; then
-                  echo "Timed out waiting for SLAM readiness"; ATTEMPT_OK=0; break
-                fi
-                sleep 5
-              done
-              [ "$ATTEMPT_OK" -eq 1 ] && echo "SLAM ready after ${elapsed}s"
+          echo "=== Waiting for /map (max 30s) ==="
+          elapsed=0
+          until ros2 topic list 2>/dev/null | grep -q "^/map$"; do
+            elapsed=$((elapsed + 2))
+            if [ "$elapsed" -ge 30 ]; then
+              echo "Timed out waiting for /map"; exit 1
             fi
-
-            if [ "$ATTEMPT_OK" -eq 1 ]; then
-              echo "=== Launch Nav2 ==="
-              setsid ros2 launch nav2_bringup navigation_launch.py \
-                use_sim_time:=true \
-                params_file:=/tmp/ci_config/nav2_params_ci.yaml \
-                autostart:=true &
-              echo $! > /tmp/nav_pid
-
-              echo "=== Waiting for Nav2 ready (max 90s): /local_costmap/costmap ==="
-              elapsed=0
-              until ros2 topic list 2>/dev/null | grep -q /local_costmap/costmap; do
-                if ! kill -0 "$(cat /tmp/nav_pid)" 2>/dev/null; then
-                  echo "Nav2 process died during startup"; ATTEMPT_OK=0; break
-                fi
-                elapsed=$((elapsed + 5))
-                if [ "$elapsed" -ge 90 ]; then
-                  echo "Timed out waiting for Nav2 readiness"; ATTEMPT_OK=0; break
-                fi
-                sleep 5
-              done
-              [ "$ATTEMPT_OK" -eq 1 ] && echo "Nav2 ready after ${elapsed}s"
-            fi
-
-            if [ "$ATTEMPT_OK" -eq 1 ]; then
-              echo "=== Check all processes still alive ==="
-              for f in /tmp/sim_pid /tmp/slam_pid /tmp/nav_pid; do
-                kill -0 "$(cat "$f")" 2>/dev/null || { echo "Process from $f died"; ATTEMPT_OK=0; }
-              done
-            fi
-
-            if [ "$ATTEMPT_OK" -eq 1 ]; then
-              echo "=== Topics ==="
-              ros2 topic list
-
-              echo "=== Check Nav2 action server ==="
-              ros2 action list | grep navigate_to_pose || ATTEMPT_OK=0
-            fi
-
-            if [ "$ATTEMPT_OK" -eq 1 ]; then
-              # Dùng tọa độ waypoint "diem_A" thật từ config/waypoints.yaml (x=1.0, y=0.0)
-              # thay vì tọa độ tùy ý, để chắc chắn nằm trong khu vực world.
-              # LƯU Ý: tọa độ này được xác nhận hợp lệ với world "warehouse" cũ. Sau khi
-              # đổi sang "depot", CHƯA xác nhận (1.0, 0.0) có nằm trong khu vực free-space
-              # của depot hay không (spawn robot mặc định vẫn ở gốc tọa độ x=0,y=0,z=0 -
-              # xem ARGUMENTS trong turtlebot4_headless.launch.py). Nếu goal bị Nav2 từ
-              # chối (invalid pose/costmap) ở lần chạy tới, cần kiểm tra lại bounds thật
-              # của depot.sdf và chỉnh tọa độ cho khớp.
-              echo "=== Sending goal (diem_A) to trigger motion ==="
-              ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
-                "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}" \
-                --feedback &
-              GOAL_PID=$!
-
-              echo "=== Check cmd_vel ==="
-              timeout 30 ros2 topic echo /cmd_vel --once || { echo "No /cmd_vel message within 30s after goal sent"; ATTEMPT_OK=0; }
-              kill $GOAL_PID 2>/dev/null || true
-            fi
-
-            if [ "$ATTEMPT_OK" -eq 1 ]; then
-              echo "CI PASS (attempt ${attempt})"
-              exit 0
-            fi
-
-            echo "Attempt ${attempt} failed."
-            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
-              echo "Cleaning up and retrying..."
-              cleanup_attempt
-            fi
+            sleep 2
           done
+          echo "/map ready after ${elapsed}s"
 
-          echo "All ${MAX_ATTEMPTS} attempts failed"
-          exit 1
+          echo "=== Launch Nav2 (controller/planner/bt_navigator/...) ==="
+          setsid ros2 launch nav2_bringup navigation_launch.py \
+            use_sim_time:=false \
+            params_file:=/tmp/ci_config/nav2_params_ci.yaml \
+            autostart:=true &
+          echo $! > /tmp/nav_pid
+
+          echo "=== Waiting for Nav2 ready (max 60s): /local_costmap/costmap ==="
+          # Không còn Gazebo/render -> không cần 180s như trước, toàn bộ node ở
+          # đây là process ROS2 thuần, lên rất nhanh trên CPU bình thường.
+          elapsed=0
+          until ros2 topic list 2>/dev/null | grep -q /local_costmap/costmap; do
+            if ! kill -0 "$(cat /tmp/nav_pid)" 2>/dev/null; then
+              echo "Nav2 process died during startup"; exit 1
+            fi
+            elapsed=$((elapsed + 2))
+            if [ "$elapsed" -ge 60 ]; then
+              echo "Timed out waiting for Nav2 readiness"; exit 1
+            fi
+            sleep 2
+          done
+          echo "Nav2 ready after ${elapsed}s"
+
+          echo "=== Check Nav2 action server ==="
+          ros2 action list | grep navigate_to_pose || { echo "navigate_to_pose action server không tồn tại"; exit 1; }
+
+          # Tọa độ waypoint "diem_A" thật từ config/waypoints.yaml (x=1.0, y=0.0),
+          # nằm giữa map 10x10m tự sinh (free space, cách viền tường ~4m).
+          echo "=== Sending goal (diem_A) - kiểm tra BT + planner_server + controller_server ==="
+          ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
+            "{pose: {header: {frame_id: 'map'}, pose: {position: {x: 1.0, y: 0.0, z: 0.0}, orientation: {w: 1.0}}}}" \
+            --feedback &
+          GOAL_PID=$!
+
+          echo "=== Check /plan (planner_server tính path thành công) ==="
+          timeout 20 ros2 topic echo /plan --once || { echo "planner_server không publish /plan trong 20s"; kill $GOAL_PID 2>/dev/null; exit 1; }
+
+          echo "=== Check /cmd_vel (controller_server + FollowPathDWA/PP không crash) ==="
+          timeout 20 ros2 topic echo /cmd_vel --once || { echo "controller_server không publish /cmd_vel trong 20s"; kill $GOAL_PID 2>/dev/null; exit 1; }
+
+          kill $GOAL_PID 2>/dev/null || true
+          echo "CI PASS (nav2_smoke_test)"
